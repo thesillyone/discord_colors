@@ -1,191 +1,185 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Генератор ANSI‑блоков для Discord</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: sans-serif; background: #f3f4f6; }
+    #editor { width:100%; max-width:800px; min-height:200px; margin:2rem auto; padding:1rem; background:#fff; border:1px solid #ddd; border-radius:.5rem; white-space: pre-wrap; }
+    .toolbar { position:fixed; top:1rem; right:1rem; width:260px; background:#fff; padding:1rem; border:1px solid #ddd; border-radius:.5rem; }
+    .toolbar button { width:100%; margin-bottom:.5rem; padding:.5rem; border:1px solid #ccc; border-radius:.25rem; cursor:pointer; background:#fafafa; }
+    .toolbar .palette { display:grid; grid-template-columns:repeat(4,1fr); gap:.25rem; margin-bottom:.5rem; }
+    #bg-palette { grid-template-columns: repeat(8, 1fr); }
+    .palette button { width:100%; height:1.5rem; border:1px solid #ccc; padding:0; }
+    #bold { font-weight:bold; }
+    #underline { text-decoration:underline; }
+    #toast { position:fixed; bottom:1rem; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); color:#fff; padding:.5rem 1rem; border-radius:.5rem; opacity:0; transition:opacity .3s; }
+    #toast.show { opacity:1; }
+  </style>
 </head>
-<body class="bg-gray-900 text-white">
-  <div class="flex h-screen">
-    <!-- Редактор -->
-    <div class="flex-1 p-8 overflow-auto">
-      <h1 class="text-2xl mb-4">Генератор ANSI‑блоков для Discord</h1>
-      <div id="editor"
-           contenteditable="true"
-           class="w-full h-[80vh] bg-gray-800 p-4 rounded border border-gray-700 whitespace-pre-wrap overflow-auto">
-        <!-- пусто -->
-      </div>
-    </div>
-
-    <!-- Панель управления -->
-    <div class="fixed top-24 right-4 w-64 bg-gray-800 p-4 rounded border border-gray-700 shadow-lg">
-      <button id="copy"
-              class="w-full bg-green-600 text-white py-2 rounded mb-2">
-        Скопировать в Discord
-      </button>
-      <button id="clear"
-              class="w-full bg-red-600 text-white py-2 rounded mb-4">
-        Очистить форматирование
-      </button>
-
-      <!-- FG‑палитра -->
-      <div class="mb-2 font-semibold">Цвет текста</div>
-      <div id="fg-palette" class="grid grid-cols-4 gap-1 mb-4">
-        <button data-fg="30" class="w-8 h-8 bg-gray-500 rounded border"></button>
-        <button data-fg="31" class="w-8 h-8 bg-red-600 rounded"></button>
-        <button data-fg="32" class="w-8 h-8 bg-green-600 rounded"></button>
-        <button data-fg="33" class="w-8 h-8 bg-yellow-400 rounded"></button>
-        <button data-fg="34" class="w-8 h-8 bg-blue-600 rounded"></button>
-        <button data-fg="35" class="w-8 h-8 bg-pink-600 rounded"></button>
-        <button data-fg="36" class="w-8 h-8 bg-cyan-400 rounded"></button>
-        <button data-fg="37" class="w-8 h-8 bg-white rounded border"></button>
-      </div>
-
-      <!-- BG‑палитра -->
-      <div class="mb-2 font-semibold">Цвет фона</div>
-      <div id="bg-palette" class="grid grid-cols-4 gap-1 mb-4">
-        <button data-bg="40" class="w-8 h-8 bg-[#23272A] rounded text-white"></button>
-        <button data-bg="41" class="w-8 h-8 bg-[#FF8C00] rounded text-white"></button>
-        <button data-bg="42" class="w-8 h-8 bg-[#5D8AA8] rounded text-white"></button>
-        <button data-bg="43" class="w-8 h-8 bg-[#20B2AA] rounded text-white"></button>
-        <button data-bg="44" class="w-8 h-8 bg-[#708090] rounded text-white"></button>
-        <button data-bg="45" class="w-8 h-8 bg-[#4B0082] rounded text-white"></button>
-        <button data-bg="46" class="w-8 h-8 bg-[#D3D3D3] rounded text-black"></button>
-        <button data-bg="47" class="w-8 h-8 bg-[#FFFFFF] rounded text-black border"></button>
-      </div>
-
-      <!-- Стили -->
-      <div class="mb-2 font-semibold">Стили</div>
-      <div class="flex gap-2">
-        <button id="bold"
-                class="flex-1 border border-gray-600 rounded py-1 font-bold">
-          B
-        </button>
-        <button id="underline"
-                class="flex-1 border border-gray-600 rounded py-1 underline">
-          U
-        </button>
-      </div>
-    </div>
-
-    <!-- Toast -->
-    <div id="toast"
-         class="fixed bottom-4 right-4 bg-green-500 text-white py-2 px-4 rounded opacity-0 transition-opacity">
-      Скопировано!
-    </div>
+<body>
+  <h1 style="text-align:center; margin-top:1rem;">Генератор ANSI‑блоков для Discord</h1>
+  <div id="editor" contenteditable></div>
+  <div class="toolbar">
+    <button id="copy">Скопировать в Discord</button>
+    <button id="clear">Очистить форматирование</button>
+    <div style="font-weight:bold; margin-top:1rem;">Цвет текста</div>
+    <div id="fg-palette" class="palette"></div>
+    <div style="font-weight:bold; margin-top:1rem;">Цвет фона</div>
+    <div id="bg-palette" class="palette"></div>
+    <div style="font-weight:bold; margin-top:.5rem;">Стили</div>
+    <button id="bold">B</button>
+    <button id="underline">U</button>
   </div>
+  <div id="toast">Скопировано!</div>
+<script>
+  console.log('ANSI Discord Generator script loaded');
+  const ESC = '\u001b';
+  const bgCss = ['#2F3136','#E97053','#7289DA','#2CDA87','#4F545C','#5865F2','#999DA0','#FFFFFF'];
+  const fgCss = ['#7f8c8d','#e74c3c','#2ecc71','#f1c40f','#3498db','#9b59b6','#1abc9c','#ecf0f1'];
+  const fgCodes = [30,31,32,33,34,35,36,37];
+  const bgCodes = fgCodes.map(c => c + 10);
 
-  <script>
-    console.log('⚙️ Скрипт загружен');
+  function wrap(type, value) {
+    console.log(`wrap called with type=${type}, value=${value}`);
+    const sel = window.getSelection();
+    console.log('Current selection text:', sel.toString());
+    if (!sel.rangeCount) {
+      console.warn('No selection range available');
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    const span = document.createElement('span');
+    span.dataset[type] = value;
+    if (type === 'fg') span.style.color = fgCss[fgCodes.indexOf(+value)];
+    if (type === 'bg') span.style.backgroundColor = bgCss[bgCodes.indexOf(+value)];
+    if (type === 'bold') span.style.fontWeight = 'bold';
+    if (type === 'underline') span.style.textDecoration = 'underline';
+    span.appendChild(range.extractContents());
+    range.insertNode(span);
+    sel.removeAllRanges();
+    console.log('Wrap applied successfully');
+  }
 
-    // Убираем автогенерацию пустых абзацев
-    document.addEventListener('DOMContentLoaded', () => {
-      const editor = document.getElementById('editor');
-      editor.innerHTML = '';
-      console.log('editor очищён от пустышек');
+  const fgCont = document.getElementById('fg-palette');
+  const bgCont = document.getElementById('bg-palette');
+
+  fgCodes.forEach((code, i) => {
+    const btn = document.createElement('button');
+    btn.style.background = fgCss[i];
+    btn.addEventListener('click', () => wrap('fg', code));
+    fgCont.appendChild(btn);
+  });
+
+  bgCodes.forEach((code, i) => {
+    const btn = document.createElement('button');
+    btn.style.background = bgCss[i];
+    btn.addEventListener('click', () => wrap('bg', code));
+    bgCont.appendChild(btn);
+  });
+
+  document.getElementById('bold').addEventListener('click', () => wrap('bold', 1));
+  document.getElementById('underline').addEventListener('click', () => wrap('underline', 4));
+
+  // Предотвращаем потерю выделения при нажатии на кнопки
+  document.querySelectorAll('.toolbar button').forEach(btn => {
+    btn.addEventListener('mousedown', e => {
+      e.preventDefault();
+      console.log('Toolbar button pressed:', btn.id || 'color button');
     });
+  });
 
-    // Оборачивает выделение в <span> и выполняет fn(span)
-    function applyToSelection(fn, name) {
-      const sel = window.getSelection();
-      console.log(`applyToSelection (${name})`, 'count=', sel.rangeCount, 'text=', sel.toString(), 'collapsed=', sel.isCollapsed);
-      if (!sel.rangeCount || sel.isCollapsed) {
-        console.log(`  → пропускаем, нет выделения`);
-        return;
+  document.getElementById('clear').addEventListener('click', () => {
+    console.log('Clear formatting clicked');
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const frag = range.extractContents();
+    const cleanFrag = document.createDocumentFragment();
+    function clean(node) {
+      if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'SPAN') {
+        node.childNodes.forEach(clean);
+      } else {
+        cleanFrag.appendChild(node.cloneNode(true));
       }
-      const range = sel.getRangeAt(0);
-      const fragment = range.extractContents();
-      const span = document.createElement('span');
-      span.dataset.bold = span.dataset.bold || '';
-      span.dataset.underline = span.dataset.underline || '';
-      span.dataset.fg = span.dataset.fg || '';
-      span.dataset.bg = span.dataset.bg || '';
-      span.appendChild(fragment);
-      console.log('  before fn dataset:', span.dataset);
-      fn(span);
-      console.log('  after fn dataset:', span.dataset);
-      range.insertNode(span);
-      console.log('  → формат применён');
     }
+    frag.childNodes.forEach(clean);
+    range.insertNode(cleanFrag);
+    sel.removeAllRanges();
+    console.log('Formatting cleared');
+  });
 
-    // Очищает форматирование только в выделенном фрагменте
-    function clearFormatting() {
-      const sel = window.getSelection();
-      console.log('clearFormatting', 'count=', sel.rangeCount, 'text=', sel.toString());
-      if (!sel.rangeCount || sel.isCollapsed) {
-        console.log('  → пропускаем, нет выделения');
-        return;
-      }
-      const range = sel.getRangeAt(0);
-      const frag = range.extractContents();
-
-      function unwrap(node) {
+  function generateANSI(root) {
+    console.log('Generating ANSI...');
+    let out = '';
+    const paras = [];
+    let cur = [];
+    root.childNodes.forEach(n => {
+      if (n.nodeType === 1 && n.tagName === 'BR') { paras.push(cur); cur = []; }
+      else cur.push(n);
+    });
+    paras.push(cur);
+    paras.forEach(nodes => {
+      const chars = [];
+      function rec(node, fmt) {
+        const f = { ...fmt };
         if (node.nodeType === 1 && node.tagName === 'SPAN') {
-          const df = document.createDocumentFragment();
-          node.childNodes.forEach(c => df.appendChild(unwrap(c)));
-          return df;
-        } else if (node.childNodes) {
-          const cpy = node.cloneNode(false);
-          node.childNodes.forEach(c => cpy.appendChild(unwrap(c)));
-          return cpy;
+          if (node.dataset.bold) f.bold = true;
+          if (node.dataset.underline) f.underline = true;
+          if (node.dataset.fg) f.fg = +node.dataset.fg;
+          if (node.dataset.bg) f.bg = +node.dataset.bg;
         }
-        return node.cloneNode();
+        if (node.nodeType === 3) {
+          node.textContent.split('').forEach(ch => chars.push({ ch, fmt: { ...f } }));
+        } else if (node.nodeType === 1) {
+          if (node.tagName === 'BR') chars.push({ ch: '\n', fmt: {} });
+          else node.childNodes.forEach(c => rec(c, f));
+        }
       }
-
-      const clean = document.createDocumentFragment();
-      frag.childNodes.forEach(c => clean.appendChild(unwrap(c)));
-      range.insertNode(clean);
-      console.log('  → форматирование убрано');
-    }
-
-    // Toast
-    function showToast() {
-      console.log('showToast');
-      const t = document.getElementById('toast');
-      t.classList.add('opacity-100');
-      setTimeout(() => t.classList.remove('opacity-100'), 1200);
-    }
-
-    // ANSI‑генератор
-    function generateANSI() {
-      console.log('generateANSI');
-      const editor = document.getElementById('editor');
-      let out = '';
-
-      // Собираем «абзацы»
-      const paras = [];
-      editor.childNodes.forEach(n => {
-        // берём только непустые или стилизованные узлы
-        if (
-          (n.nodeType === 1 && (n.tagName==='DIV' || n.tagName==='P') && n.textContent.trim()!=='') ||
-          (n.nodeType === 3 && n.textContent.trim()!=='')
-        ) paras.push(n);
-      });
-      console.log('  параграфов найдено:', paras.length);
-
-      paras.forEach((p, pi) => {
-        console.log(`  параграф[${pi}] текст:`, p.textContent);
-        // собираем символы + формат
-        const items = [];
-        function trav(node, fmt) {
-          if (node.nodeType === 3) {
-            for (let ch of node.textContent) {
-              items.push({ char: ch, fmt: { ...fmt } });
-            }
-          } else if (node.nodeType === 1 && node.tagName==='SPAN') {
-            const f2 = { ...fmt };
-            if (node.dataset.bold==='true')      f2.bold = true;
-            if (node.dataset.underline==='true') f2.underline = true;
-            if (node.dataset.fg)                f2.fg = node.dataset.fg;
-            if (node.dataset.bg)                f2.bg = node.dataset.bg;
-            node.childNodes.forEach(c=>trav(c,f2));
-          } else {
-            node.childNodes.forEach(c=>trav(c,fmt));
+      nodes.forEach(n => rec(n, {}));
+      const hasColor = chars.some(i => i.fmt.fg != null || i.fmt.bg != null);
+      if (hasColor) {
+        out += '```ansi\n';
+        let prev = { bold: false, underline: false, fg: null, bg: null };
+        chars.forEach(item => {
+          const f = item.fmt;
+          if (item.ch !== ' ' && item.ch !== '\n' &&
+              (f.bold !== prev.bold || f.underline !== prev.underline || f.fg !== prev.fg || f.bg !== prev.bg)) {
+            const codes = [f.bold ? 1 : 0, f.underline ? 4 : 0, f.fg != null ? f.fg : 0, f.bg != null ? f.bg : 0];
+            out += ESC + '[' + codes.join(';') + 'm';
+            prev = { bold: !!f.bold, underline: !!f.underline, fg: f.fg, bg: f.bg };
           }
-        }
-        trav(p, { bold:false, underline:false, fg:'0', bg:'0' });
-        console.log(`    символов:`, items.length);
+          out += item.ch;
+        });
+        out += ESC + '[0;0;0;0m\n```\n';
+      } else {
+        let line = '';
+        chars.forEach(item => {
+          if (item.fmt.bold && item.ch.trim()) line += '**' + item.ch + '**';
+          else line += item.ch;
+        });
+        out += line + '\n';
+      }
+    });
+    console.log('ANSI generation complete');
+    return out;
+  }
 
-        // решаем, ANSI или Markdown
-        const hasColor = items.some(it=>it.fmt.fg!=='0'||it.fmt.bg!
+  document.getElementById('copy').addEventListener('click', () => {
+    console.log('Copy button clicked');
+    const txt = generateANSI(document.getElementById('editor'));
+    console.log('Generated ANSI text:', txt);
+    navigator.clipboard.writeText(txt)
+      .then(() => {
+        console.log('Text copied to clipboard');
+        const t = document.getElementById('toast');
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 1500);
+      })
+      .catch(err => console.error('Error copying text:', err));
+  });
+</script>
+</body>
+</html>
