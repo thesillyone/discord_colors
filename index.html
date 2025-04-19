@@ -69,7 +69,13 @@
   });
 
   document.getElementById('bold').addEventListener('mousedown', e => e.preventDefault());
-  document.getElementById('underline').addEventListener('mousedown', e => e.preventDefault());
+  // стили Bold/Underline
+  const btnBold = document.getElementById('bold');
+  const btnUnder = document.getElementById('underline');
+  btnBold.addEventListener('mousedown', e => e.preventDefault());
+  btnUnder.addEventListener('mousedown', e => e.preventDefault());
+  btnBold.addEventListener('click', e => { e.preventDefault(); wrap('bold', 1); });
+  btnUnder.addEventListener('click', e => { e.preventDefault(); wrap('underline', 4); });
   document.getElementById('clear').addEventListener('click', () => {
     const sel = window.getSelection(); if (!sel.rangeCount) return;
     const range = sel.getRangeAt(0);
@@ -86,37 +92,58 @@
 
   function generateANSI(root) {
     let out = '';
+    const tokens = [];
+    Array.from(root.childNodes).forEach(n => {
+      if (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'DIV') {
+        Array.from(n.childNodes).forEach(child => tokens.push(child));
+        tokens.push({ newline: true });
+      } else {
+        tokens.push(n);
+      }
+    });
+    // split into paragraphs
     const paras = [];
     let cur = [];
-    root.childNodes.forEach(n => {
-      if (n.nodeType === 1 && n.tagName === 'BR') { paras.push(cur); cur = []; }
-      else cur.push(n);
+    tokens.forEach(tok => {
+      if (tok.newline) {
+        paras.push(cur);
+        cur = [];
+      } else if (tok.nodeType) {
+        cur.push(tok);
+      }
     });
     paras.push(cur);
     paras.forEach(nodes => {
       const chars = [];
       function rec(node, fmt) {
         const f = { ...fmt };
-        if (node.nodeType === 1 && node.tagName === 'SPAN') {
+        if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'SPAN') {
           if (node.dataset.bold) f.bold = true;
           if (node.dataset.underline) f.underline = true;
           if (node.dataset.fg) f.fg = +node.dataset.fg;
           if (node.dataset.bg) f.bg = +node.dataset.bg;
         }
-        if (node.nodeType === 3) node.textContent.split('').forEach(ch => chars.push({ ch, fmt: { ...f } }));
-        else if (node.nodeType === 1) {
-          if (node.tagName === 'BR') chars.push({ ch: '\n', fmt: {} });
-          else node.childNodes.forEach(c => rec(c, f));
+        if (node.nodeType === Node.TEXT_NODE) {
+          node.textContent.split('').forEach(ch => chars.push({ ch, fmt: { ...f } }));
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          if (node.tagName === 'BR') {
+            chars.push({ ch: '
+', fmt: {} });
+          } else {
+            node.childNodes.forEach(c => rec(c, f));
+          }
         }
       }
       nodes.forEach(n => rec(n, {}));
       const hasColor = chars.some(i => i.fmt.fg != null || i.fmt.bg != null);
       if (hasColor) {
-        out += '```ansi\n';
+        out += '```ansi
+';
         let prevCodes = '';
         chars.forEach(item => {
           const f = item.fmt;
-          if (item.ch !== '\n') {
+          if (item.ch !== '
+') {
             const codes = [];
             if (f.bold) codes.push(1);
             if (f.underline) codes.push(4);
@@ -131,14 +158,17 @@
           }
           out += item.ch;
         });
-        out += ESC + '[0;0;0;0m\n```\n';
+        out += ESC + '[0;0;0;0m
+```
+';
       } else {
         let line = '';
         chars.forEach(item => {
           if (item.fmt.bold && item.ch.trim()) line += '**' + item.ch + '**';
           else line += item.ch;
         });
-        out += line + '\n';
+        out += line + '
+';
       }
     });
     return out;
