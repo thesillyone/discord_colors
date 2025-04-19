@@ -36,13 +36,15 @@
 <script>
   console.log('ANSI Discord Generator script loaded');
   const ESC = '\u001b';
+  const NEW_LINE = '\n';
   const bgCss = ['#002b36','#cb4b16','#586e75','#657b83','#839496','#6c71c4','#93a1a1','#fdf6e3'];
   const fgCss = ['#586e75','#dc322f','#859900','#b58900','#268bd2','#d33682','#2aa198','#eee8d5'];
   const fgCodes = [30,31,32,33,34,35,36,37];
   const bgCodes = fgCodes.map(c => c + 10);
 
   function wrap(type, value) {
-    const sel = window.getSelection(); if (!sel.rangeCount) return;
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
     const range = sel.getRangeAt(0);
     const span = document.createElement('span');
     span.dataset[type] = value;
@@ -57,13 +59,15 @@
 
   const fgCont = document.getElementById('fg-palette');
   const bgCont = document.getElementById('bg-palette');
-  fgCss.forEach((color,i) => {
-    const btn = document.createElement('button'); btn.style.background = color;
+  fgCss.forEach((color, i) => {
+    const btn = document.createElement('button');
+    btn.style.background = color;
     btn.addEventListener('click', e => { e.preventDefault(); wrap('fg', fgCodes[i]); });
     fgCont.appendChild(btn);
   });
-  bgCss.forEach((color,i) => {
-    const btn = document.createElement('button'); btn.style.background = color;
+  bgCss.forEach((color, i) => {
+    const btn = document.createElement('button');
+    btn.style.background = color;
     btn.addEventListener('click', e => { e.preventDefault(); wrap('bg', bgCodes[i]); });
     bgCont.appendChild(btn);
   });
@@ -71,16 +75,18 @@
   const btnBold = document.getElementById('bold');
   const btnUnder = document.getElementById('underline');
   [btnBold, btnUnder].forEach(btn => btn.addEventListener('mousedown', e => e.preventDefault()));
-  btnBold.addEventListener('click', e => { e.preventDefault(); wrap('bold',1); });
-  btnUnder.addEventListener('click', e => { e.preventDefault(); wrap('underline',4); });
+  btnBold.addEventListener('click', e => { e.preventDefault(); wrap('bold', 1); });
+  btnUnder.addEventListener('click', e => { e.preventDefault(); wrap('underline', 4); });
 
   document.getElementById('clear').addEventListener('click', () => {
-    const sel = window.getSelection(); if (!sel.rangeCount) return;
+    console.log('Clear formatting');
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
     const range = sel.getRangeAt(0);
     const frag = range.extractContents();
     const cleanFrag = document.createDocumentFragment();
     const cleanNode = node => {
-      if (node.nodeType===1 && node.tagName==='SPAN') node.childNodes.forEach(cleanNode);
+      if (node.nodeType === 1 && node.tagName === 'SPAN') node.childNodes.forEach(cleanNode);
       else cleanFrag.appendChild(node.cloneNode(true));
     };
     frag.childNodes.forEach(cleanNode);
@@ -89,107 +95,94 @@
   });
 
   function generateANSI(root) {
-  console.log('--- generateANSI start ---');
-  const paras = [];
-  let cur = [];
-  Array.from(root.childNodes).forEach(n => {
-    console.log('Node:', n, 'type:', n.nodeType, 'tag:', n.tagName);
-    if (n.nodeType === 1 && n.tagName === 'DIV') {
-      // push previous if exists
-      if (cur.length) {
-        console.log('Push paragraph before DIV, count:', cur.length);
-        paras.push(cur);
-        cur = [];
+    console.log('--- generateANSI start ---');
+    const paras = [];
+    let cur = [];
+    Array.from(root.childNodes).forEach(n => {
+      console.log('Node:', n, 'type:', n.nodeType, 'tag:', n.tagName);
+      if (n.nodeType === 1 && n.tagName === 'DIV') {
+        if (cur.length) { paras.push(cur); cur = []; }
+        paras.push(Array.from(n.childNodes));
+      } else if (n.nodeType === 1 && n.tagName === 'BR') {
+        paras.push(cur); cur = [];
+      } else {
+        cur.push(n);
       }
-      // this DIV is its own paragraph
-      const divChildren = Array.from(n.childNodes);
-      console.log('Push DIV paragraph, children count:', divChildren.length);
-      paras.push(divChildren);
-    } else if (n.nodeType === 1 && n.tagName === 'BR') {
-      console.log('Push paragraph at BR, count:', cur.length);
-      paras.push(cur);
-      cur = [];
-    } else {
-      cur.push(n);
-    }
-  });
-  if (cur.length) {
-    console.log('Push final paragraph, count:', cur.length);
-    paras.push(cur);
+    });
+    if (cur.length) paras.push(cur);
+
+    let out = '';
+    paras.forEach((nodes, pi) => {
+      console.log('Paragraph', pi, 'nodes count:', nodes.length);
+      const chars = [];
+      const recurse = (node, fmt) => {
+        const f = { ...fmt };
+        if (node.nodeType === 1 && node.tagName === 'SPAN') {
+          if (node.dataset.bold) f.bold = true;
+          if (node.dataset.underline) f.underline = true;
+          if (node.dataset.fg) f.fg = +node.dataset.fg;
+          if (node.dataset.bg) f.bg = +node.dataset.bg;
+        }
+        if (node.nodeType === 3) {
+          node.textContent.split('').forEach(ch => chars.push({ ch, fmt: { ...f } }));
+        } else if (node.nodeType === 1) {
+          if (node.tagName === 'BR') {
+            chars.push({ ch: NEW_LINE, fmt: {} });
+          } else {
+            Array.from(node.childNodes).forEach(c => recurse(c, f));
+          }
+        }
+      };
+      nodes.forEach(n => recurse(n, {}));
+
+      const hasColor = chars.some(c => c.fmt.fg != null || c.fmt.bg != null);
+      if (hasColor) {
+        out += '```ansi' + NEW_LINE;
+        let prevCodes = '';
+        chars.forEach((item, ci) => {
+          const { ch, fmt } = item;
+          if (ch === NEW_LINE) {
+            out += NEW_LINE;
+            prevCodes = '';
+          } else {
+            const codes = [];
+            if (fmt.bold) codes.push(1);
+            if (fmt.underline) codes.push(4);
+            if (fmt.fg != null) codes.push(fmt.fg);
+            if (fmt.bg != null) codes.push(fmt.bg);
+            else codes.push(49);
+            const codeStr = codes.join(';');
+            if (codeStr !== prevCodes) {
+              out += ESC + '[' + codeStr + 'm';
+              prevCodes = codeStr;
+            }
+            out += ch;
+          }
+        });
+        out += ESC + '[0m' + NEW_LINE + '```' + NEW_LINE;
+      } else {
+        let line = '';
+        chars.forEach(({ ch, fmt }) => {
+          if (fmt.bold && ch.trim()) line += '**' + ch + '**';
+          else line += ch;
+        });
+        out += line + NEW_LINE;
+      }
+    });
+    console.log('--- generateANSI end ---');
+    return out;
   }
 
-  let out = '';
-  paras.forEach((nodes, pi) => {
-    console.log('Paragraph', pi, 'nodes count:', nodes.length);
-    const chars = [];
-    const recurse = (node, fmt) => {
-      const f = { ...fmt };
-      if (node.nodeType === 1 && node.tagName === 'SPAN') {
-        if (node.dataset.bold) f.bold = true;
-        if (node.dataset.underline) f.underline = true;
-        if (node.dataset.fg) f.fg = +node.dataset.fg;
-        if (node.dataset.bg) f.bg = +node.dataset.bg;
-      }
-      if (node.nodeType === 3) {
-        node.textContent.split('').forEach(ch => chars.push({ ch, fmt: { ...f } }));
-      } else if (node.nodeType === 1) {
-        if (node.tagName === 'BR') {
-          chars.push({ ch: '\n', fmt: {} });
-        } else {
-          Array.from(node.childNodes).forEach(c => recurse(c, f));
-        }
-      }
-    };
-    nodes.forEach(n => recurse(n, {}));
-
-    const hasColor = chars.some(c => c.fmt.fg != null || c.fmt.bg != null);
-    console.log('Paragraph', pi, 'hasColor:', hasColor, 'chars count:', chars.length);
-    if (hasColor) {
-      out += '```ansi\n';
-      let prevCodes = '';
-      chars.forEach((item, ci) => {
-        const { ch, fmt } = item;
-        if (ch !== '\n') {
-          const codes = [];
-          if (fmt.bold) codes.push(1);
-          if (fmt.underline) codes.push(4);
-          if (fmt.fg != null) codes.push(fmt.fg);
-          if (fmt.bg != null) codes.push(fmt.bg);
-          else codes.push(49);
-          const codeStr = codes.join(';');
-          if (codeStr !== prevCodes) {
-            out += ESC + '[' + codeStr + 'm';
-            prevCodes = codeStr;
-            console.log('Apply codes at char', ci, ':', codeStr);
-          }
-        } else {
-          console.log('Newline in chars at', ci);
-        }
-        out += ch;
-      });
-      out += ESC + '[0m\n```\n';
-    } else {
-      let line = '';
-      chars.forEach(item => {
-        if (item.fmt.bold && item.ch.trim()) {
-          line += '**' + item.ch + '**';
-        } else {
-          line += item.ch;
-        }
-      });
-      out += line + '\n';
-    }
-  });
-  console.log('--- generateANSI end ---');
-  return out;
-}
-
-document.getElementById('copy').addEventListener('click',e=>{.addEventListener('click',e=>{
+  // Copy handler
+  const btnCopy = document.getElementById('copy');
+  btnCopy.addEventListener('click', e => {
     e.preventDefault();
-    const txt=generateANSI(document.getElementById('editor'));
-    navigator.clipboard.writeText(txt).then(()=>{
-      const t=document.getElementById('toast'); t.classList.add('show');
-      setTimeout(()=>t.classList.remove('show'),1500);
+    console.log('Copy to clipboard');
+    const txt = generateANSI(document.getElementById('editor'));
+    navigator.clipboard.writeText(txt).then(() => {
+      const t = document.getElementById('toast');
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1500);
     });
   });
 </script>
