@@ -116,13 +116,13 @@
         let prevCodes = '';
         chars.forEach(item => {
           const f = item.fmt;
-          if (item.ch !== '
-') {
+          if (item.ch !== '\n') {
             const codes = [];
             if (f.bold) codes.push(1);
             if (f.underline) codes.push(4);
             if (f.fg != null) codes.push(f.fg);
             if (f.bg != null) codes.push(f.bg);
+            else codes.push(49);
             const codeStr = codes.join(';');
             if (codeStr !== prevCodes) {
               out += ESC + '[' + codeStr + 'm';
