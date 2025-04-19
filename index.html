@@ -77,29 +77,33 @@
   </div>
 
   <script>
+    console.log('⚙️ Скрипт загружен');
+
     // Оборачивает выделение в <span>, даёт его колбэку, затем вставляет обратно
-    function applyToSelection(fn) {
+    function applyToSelection(fn, name) {
       const sel = window.getSelection();
+      console.log(`applyToSelection (${name})`, sel.rangeCount, sel.toString());
       if (!sel.rangeCount) return;
       const range = sel.getRangeAt(0);
+      console.log('  range startContainer:', range.startContainer, 'endContainer:', range.endContainer);
       const fragment = range.extractContents();
       const wrapper = document.createElement('span');
-      // Начальные значения, если ещё нет
       wrapper.dataset.bold = wrapper.dataset.bold || '';
       wrapper.dataset.underline = wrapper.dataset.underline || '';
       wrapper.dataset.fg = wrapper.dataset.fg || '';
       wrapper.dataset.bg = wrapper.dataset.bg || '';
-      // Кладём в обёртку
       wrapper.appendChild(fragment);
-      // Даем пользователю изменить dataset
+      console.log('  before fn, wrapper.dataset:', wrapper.dataset);
       fn(wrapper);
-      // Вставляем обратно
+      console.log('  after fn, wrapper.dataset:', wrapper.dataset);
       range.insertNode(wrapper);
+      console.log('  applied to selection');
     }
 
     // Очищает только выделенный участок от <span>…</span>
     function clearFormatting() {
       const sel = window.getSelection();
+      console.log('clearFormatting', sel.rangeCount, sel.toString());
       if (!sel.rangeCount) return;
       const range = sel.getRangeAt(0);
       const fragment = range.extractContents();
@@ -121,43 +125,52 @@
       const clean = document.createDocumentFragment();
       fragment.childNodes.forEach(c => clean.appendChild(unwrap(c)));
       range.insertNode(clean);
+      console.log('  formatting cleared on selection');
     }
 
     // Привязка кнопок
-    document.getElementById('clear').onclick = clearFormatting;
+    document.getElementById('clear').onclick = () => {
+      console.log('click clear');
+      clearFormatting();
+    };
 
     document.getElementById('fg-palette').onclick = e => {
       const btn = e.target.closest('button[data-fg]');
+      console.log('click fg-palette', btn?.dataset.fg);
       if (!btn) return;
       const code = btn.dataset.fg;
       applyToSelection(span => {
         span.dataset.fg = code;
-      });
+      }, 'fg');
     };
 
     document.getElementById('bg-palette').onclick = e => {
       const btn = e.target.closest('button[data-bg]');
+      console.log('click bg-palette', btn?.dataset.bg);
       if (!btn) return;
       const code = btn.dataset.bg;
       applyToSelection(span => {
         span.dataset.bg = code;
-      });
+      }, 'bg');
     };
 
     document.getElementById('bold').onclick = () => {
+      console.log('click bold');
       applyToSelection(span => {
         span.dataset.bold = span.dataset.bold === 'true' ? '' : 'true';
-      });
+      }, 'bold');
     };
 
     document.getElementById('underline').onclick = () => {
+      console.log('click underline');
       applyToSelection(span => {
         span.dataset.underline = span.dataset.underline === 'true' ? '' : 'true';
-      });
+      }, 'underline');
     };
 
     // Toast
     function showToast() {
+      console.log('showToast');
       const t = document.getElementById('toast');
       t.classList.add('opacity-100');
       setTimeout(() => t.classList.remove('opacity-100'), 1200);
@@ -165,21 +178,22 @@
 
     // Сборка ANSI‑текста
     function generateANSI() {
+      console.log('generateANSI start');
       const editor = document.getElementById('editor');
       let out = '';
 
-      // Получаем «абзацы» — либо DIVы внутри, либо текстовые узлы
+      // Получаем абзацы
       const paras = [];
       editor.childNodes.forEach(n => {
-        if (n.nodeType === 1 && (n.tagName === 'DIV' || n.tagName === 'P')) {
-          paras.push(n);
-        } else if (n.nodeType === 3 && n.textContent.trim() !== '') {
+        if ((n.nodeType === 1 && (n.tagName === 'DIV' || n.tagName === 'P')) ||
+            (n.nodeType === 3 && n.textContent.trim() !== '')) {
           paras.push(n);
         }
       });
+      console.log('  paragraphs count:', paras.length);
 
-      paras.forEach(p => {
-        // Собираем массив {char, fmt}
+      paras.forEach((p, pi) => {
+        console.log(`  paragraph[${pi}]:`, p);
         const items = [];
         function traverse(node, fmt) {
           if (node.nodeType === 3) {
@@ -197,31 +211,29 @@
             node.childNodes.forEach(c => traverse(c, fmt));
           }
         }
-
-        // Начальный формат
         traverse(p, { bold: false, underline: false, fg: '0', bg: '0' });
+        console.log(`    items count: ${items.length}`, items);
 
         const hasColor = items.some(it => it.fmt.fg !== '0' || it.fmt.bg !== '0');
+        console.log(`    hasColor: ${hasColor}`);
         if (!hasColor) {
-          // Markdown‑bold абзац
-          const raw = p.nodeType === 3 ? p.textContent : p.textContent;
+          const raw = p.textContent;
           const needBold = items.some(it => it.fmt.bold);
           out += needBold ? `**${raw}**\n` : `${raw}\n`;
+          console.log(`    plain paragraph:`, raw);
         } else {
-          // ANSI‑блок
           out += '```ansi\n';
           let prev = { bold: false, underline: false, fg: '0', bg: '0' };
           for (let it of items) {
             if (it.char === '\n') continue;
             const f = it.fmt;
             const changed =
-              f.bold  !== prev.bold  ||
+              f.bold      !== prev.bold  ||
               f.underline !== prev.underline ||
-              f.fg    !== prev.fg    ||
-              f.bg    !== prev.bg;
+              f.fg        !== prev.fg    ||
+              f.bg        !== prev.bg;
 
             if (changed && it.char !== ' ') {
-              // Формируем всегда четыре кода
               const codes = [
                 f.bold ? 1 : 0,
                 f.underline ? 4 : 0,
@@ -230,22 +242,29 @@
               ];
               out += `\u001b[${codes.join(';')}m`;
               prev = { ...f };
+              console.log('      emit code:', codes, 'for char', it.char);
             }
             out += it.char;
           }
-          // Общий сброс
           out += '\u001b[0;0;0;0m\n```\n';
         }
       });
 
+      console.log('generateANSI result:\n', out);
       return out;
     }
 
     // Копировать
     document.getElementById('copy').onclick = () => {
+      console.log('click copy');
       const txt = generateANSI();
-      navigator.clipboard.writeText(txt).then(showToast);
+      navigator.clipboard.writeText(txt).then(
+        () => { console.log('clipboard write success'); showToast(); },
+        err => console.error('clipboard write failed', err)
+      );
     };
+
+    console.log('⚙️ Скрипт инициализирован');
   </script>
 </body>
 </html>
