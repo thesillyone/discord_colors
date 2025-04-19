@@ -44,9 +44,30 @@
       border:1px solid #202225;
       border-radius:.25rem;
     }
-    .toolbar .palette { display:grid; gap:.25rem; }
-    #fg-palette { grid-template-columns: repeat(4,1fr); }
-    #bg-palette { grid-template-columns: repeat(8,1fr); }
+    .toolbar .row {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .toolbar .row button {
+      flex: 1;
+      text-align: center;
+    }
+    .toolbar .row button.bold {
+      font-weight: bold;
+    }
+    .toolbar .row button.underline {
+      text-decoration: underline;
+    }
+    .toolbar .row button.active {
+      background: #5865f2;
+    }
+    .toolbar .palette {
+      display:grid;
+      gap:.25rem;
+    }
+    #fg-palette, #bg-palette {
+      grid-template-columns: repeat(8, 1fr);
+    }
     .palette button {
       width:100%; height:1.5rem;
       border:1px solid #36393f;
@@ -76,165 +97,168 @@
     <div id="bg-palette" class="palette"></div>
 
     <div style="font-weight:bold; margin-top:.5rem;">Стили</div>
-    <button id="bold">B</button>
-    <button id="underline">U</button>
+    <div class="row">
+      <button id="bold" class="bold">Жирный</button>
+      <button id="underline" class="underline">Подчеркнуть</button>
+    </div>
   </div>
   <div id="toast">Скопировано!</div>
 
   <script>
-    const ESC      = '\u001b';
-    const NEW_LINE = '\n';
-
-    // палитры
-    const fgCss   = ['#586e75','#dc322f','#859900','#b58900','#268bd2','#d33682','#2aa198','#eee8d5'];
-    const bgCss   = ['#002b36','#cb4b16','#586e75','#657b83','#839496','#6c71c4','#93a1a1','#fdf6e3'];
+    const ESC = '\u001b';
+    const fgCss = ['#586e75','#dc322f','#859900','#b58900','#268bd2','#d33682','#2aa198','#eee8d5'];
+    const bgCss = ['#002b36','#cb4b16','#586e75','#657b83','#839496','#6c71c4','#93a1a1','#fdf6e3'];
     const fgCodes = [30,31,32,33,34,35,36,37];
     const bgCodes = fgCodes.map(c=>c+10);
 
-    function wrap(type, value) {
-      const sel = window.getSelection();
-      if (!sel.rangeCount) return;
-      const range = sel.getRangeAt(0);
-      const span  = document.createElement('span');
-      span.dataset[type] = value;
-      if (type==='fg')        span.style.color           = fgCss[ fgCodes.indexOf(+value) ];
-      if (type==='bg')        span.style.backgroundColor = bgCss[ bgCodes.indexOf(+value) ];
-      if (type==='bold')      span.style.fontWeight      = 'bold';
-      if (type==='underline') span.style.textDecoration = 'underline';
-      span.appendChild(range.extractContents());
-      range.insertNode(span);
-      sel.removeAllRanges();
-    }
+    const editor = document.getElementById('editor');
 
-    // рисуем палитры
-    const fgCont = document.getElementById('fg-palette');
-    const bgCont = document.getElementById('bg-palette');
-    fgCodes.forEach((c,i)=>{
-      const btn = document.createElement('button');
-      btn.style.background = fgCss[i];
-      btn.addEventListener('click', e => { e.preventDefault(); wrap('fg', c); });
-      fgCont.appendChild(btn);
-    });
-    bgCodes.forEach((c,i)=>{
-      const btn = document.createElement('button');
-      btn.style.background = bgCss[i];
-      btn.addEventListener('click', e => { e.preventDefault(); wrap('bg', c); });
-      bgCont.appendChild(btn);
-    });
-
-    // B / U
-    ['bold','underline'].forEach(type=>{
-      const btn = document.getElementById(type);
-      btn.addEventListener('mousedown', e => e.preventDefault());
-      btn.addEventListener('click', e => {
+    editor.addEventListener('beforeinput', function(e) {
+      if (e.inputType === 'insertText' && e.data) {
         e.preventDefault();
-        wrap(type, type==='bold'?1:4);
-      });
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const range = sel.getRangeAt(0);
+        const span = document.createElement('span');
+        span.textContent = e.data;
+        range.deleteContents();
+        range.insertNode(span);
+        range.setStartAfter(span);
+        range.setEndAfter(span);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        updateToolbarState();
+      }
     });
 
-    // —— очистка по старому алгоритму ——
-    const clearBtn = document.getElementById('clear');
-    clearBtn.addEventListener('mousedown', e => e.preventDefault());
-    clearBtn.addEventListener('click', e => {
-      e.preventDefault();
+    function applyStyle(type, value) {
       const sel = window.getSelection();
       if (!sel.rangeCount) return;
       const range = sel.getRangeAt(0);
-      const frag  = range.extractContents();
-      const clean = document.createDocumentFragment();
-      function cleanNode(node) {
-        if (node.nodeType===1 && node.tagName==='SPAN') {
-          Array.from(node.childNodes).forEach(cleanNode);
-        } else {
-          clean.appendChild(node.cloneNode(true));
-        }
-      }
-      Array.from(frag.childNodes).forEach(cleanNode);
-      range.insertNode(clean);
-      document.getElementById('editor').normalize();
-      sel.removeAllRanges();
-    });
+      const spans = Array.from(editor.querySelectorAll('span'));
 
-    // —— генерация ANSI с правильными \n ——
-    function generateANSI(root) {
-      const chars = [];
-      function rec(node, fmt) {
-        const f = Object.assign({}, fmt);
-        if (node.nodeType===1 && node.tagName==='SPAN') {
-          if (node.dataset.bold)      f.bold      = 1;
-          if (node.dataset.underline) f.underline = 4;
-          if (node.dataset.fg)        f.fg        = +node.dataset.fg;
-          if (node.dataset.bg)        f.bg        = +node.dataset.bg;
+      let toggleOff = true;
+      spans.forEach(span => {
+        if (range.intersectsNode(span)) {
+          if (!(type in span.dataset)) toggleOff = false;
         }
-        if (node.nodeType===3) {
-          node.textContent.split('').forEach(ch=>{
-            chars.push({ ch, fmt: Object.assign({}, f) });
-          });
-        } else if (node.nodeType===1) {
-          if (node.tagName==='BR') {
-            chars.push({ ch: NEW_LINE, fmt: Object.assign({}, f) });
-          } else if (node.tagName==='DIV') {
-            // обработать вложенное содержимое
-            Array.from(node.childNodes).forEach(c=>rec(c, f));
-            // и добавить перевод строки
-            chars.push({ ch: NEW_LINE, fmt: Object.assign({}, f) });
+      });
+
+      spans.forEach(span => {
+        if (range.intersectsNode(span)) {
+          if (toggleOff) {
+            delete span.dataset[type];
+            span.style[type === 'bold' ? 'fontWeight' : 'textDecoration'] = '';
           } else {
-            Array.from(node.childNodes).forEach(c=>rec(c, f));
+            mergeAttributes(span, type, value);
           }
         }
-      }
-      // запускаем по всем дочерним узлам, чтобы DIV-ы давали \n
-      Array.from(root.childNodes).forEach(n=>rec(n, { bold:0, underline:0, fg:0, bg:0 }));
-
-      let out  = '';
-      let prev = { bold:0, underline:0, fg:0, bg:0 };
-      let any  = false;
-
-      chars.forEach(item => {
-        const f = item.fmt;
-        if (f.bold||f.underline||f.fg||f.bg) any = true;
-        if (
-          f.bold      !== prev.bold    ||
-          f.underline !== prev.underline||
-          f.fg        !== prev.fg      ||
-          f.bg        !== prev.bg
-        ) {
-          const codes = [];
-          if (f.bold)      codes.push(1);
-          if (f.underline) codes.push(4);
-          codes.push(f.fg   || 0);
-          // фон 0 → 49
-          codes.push(f.bg? f.bg: 49);
-          out += ESC + '[' + codes.join(';') + 'm';
-          prev = Object.assign({}, f);
-        }
-        out += item.ch;
       });
+      updateToolbarState();
+    }
 
-      // сброс в конце
-      out += ESC + '[0m';
-
-      if (any) {
-        return '```ansi' + NEW_LINE
-             + out   + NEW_LINE
-             + '```';
-      } else {
-        return out;
+    function mergeAttributes(span, type, value) {
+      if (type === 'fg') {
+        span.dataset.fg = value;
+        span.style.color = fgCss[fgCodes.indexOf(+value)];
+      } else if (type === 'bg') {
+        span.dataset.bg = value;
+        span.style.backgroundColor = bgCss[bgCodes.indexOf(+value)];
+      } else if (type === 'bold') {
+        span.dataset.bold = 1;
+        span.style.fontWeight = 'bold';
+      } else if (type === 'underline') {
+        span.dataset.underline = 4;
+        span.style.textDecoration = 'underline';
       }
     }
 
-    // копирование
-    const btnCopy = document.getElementById('copy');
-    btnCopy.addEventListener('mousedown', e=>e.preventDefault());
-    btnCopy.addEventListener('click', e=>{
-      e.preventDefault();
-      const txt = generateANSI(document.getElementById('editor'));
-      navigator.clipboard.writeText(txt).then(()=>{
+    function updateToolbarState() {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const spans = Array.from(editor.querySelectorAll('span'));
+      const selected = spans.filter(span => range.intersectsNode(span));
+
+      const boldBtn = document.getElementById('bold');
+      const underlineBtn = document.getElementById('underline');
+
+      const allBold = selected.length && selected.every(span => span.dataset.bold);
+      const allUnderline = selected.length && selected.every(span => span.dataset.underline);
+
+      boldBtn.classList.toggle('active', allBold);
+      underlineBtn.classList.toggle('active', allUnderline);
+    }
+
+    document.getElementById('bold').onclick = () => applyStyle('bold', 1);
+    document.getElementById('underline').onclick = () => applyStyle('underline', 4);
+
+    document.getElementById('clear').onclick = () => {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const spans = Array.from(editor.querySelectorAll('span'));
+      spans.forEach(span => {
+        if (range.intersectsNode(span)) {
+          const newSpan = document.createElement('span');
+          newSpan.textContent = span.textContent;
+          span.replaceWith(newSpan);
+        }
+      });
+      updateToolbarState();
+    };
+
+    document.getElementById('fg-palette').append(...fgCodes.map((c,i) => {
+      const b = document.createElement('button');
+      b.style.background = fgCss[i];
+      b.onclick = () => applyStyle('fg', c);
+      return b;
+    }));
+
+    document.getElementById('bg-palette').append(...bgCodes.map((c,i) => {
+      const b = document.createElement('button');
+      b.style.background = bgCss[i];
+      b.onclick = () => applyStyle('bg', c);
+      return b;
+    }));
+
+    function generateANSI(root) {
+      let out = '', prev = {}, any = false;
+      function code(fmt) {
+        const parts = [];
+        if (fmt.bold) parts.push(1);
+        if (fmt.underline) parts.push(4);
+        if (fmt.fg) parts.push(fmt.fg);
+        if (fmt.bg) parts.push(fmt.bg);
+        return parts.length ? ESC + '[' + parts.join(';') + 'm' : '';
+      }
+      for (const node of root.querySelectorAll('span')) {
+        const fmt = {
+          bold: node.dataset.bold ? 1 : 0,
+          underline: node.dataset.underline ? 4 : 0,
+          fg: +node.dataset.fg || 0,
+          bg: +node.dataset.bg || 0
+        };
+        const diff = JSON.stringify(fmt) !== JSON.stringify(prev);
+        if (diff) {
+          out += ESC + '[0m' + code(fmt);
+          prev = fmt;
+        }
+        out += node.textContent;
+        any = any || Object.values(fmt).some(v => v);
+      }
+      if (any) out += ESC + '[0m';
+      return '```ansi\n' + out + '\n```';
+    }
+
+    document.getElementById('copy').onclick = () => {
+      const ansi = generateANSI(document.getElementById('editor'));
+      navigator.clipboard.writeText(ansi).then(() => {
         const t = document.getElementById('toast');
         t.classList.add('show');
-        setTimeout(()=>t.classList.remove('show'),1500);
+        setTimeout(() => t.classList.remove('show'), 1500);
       });
-    });
+    };
   </script>
 </body>
 </html>
