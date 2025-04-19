@@ -57,126 +57,116 @@
 
   const fgCont = document.getElementById('fg-palette');
   const bgCont = document.getElementById('bg-palette');
-  fgCss.forEach((color, i) => {
+  fgCss.forEach((color,i) => {
     const btn = document.createElement('button'); btn.style.background = color;
     btn.addEventListener('click', e => { e.preventDefault(); wrap('fg', fgCodes[i]); });
     fgCont.appendChild(btn);
   });
-  bgCss.forEach((color, i) => {
+  bgCss.forEach((color,i) => {
     const btn = document.createElement('button'); btn.style.background = color;
     btn.addEventListener('click', e => { e.preventDefault(); wrap('bg', bgCodes[i]); });
     bgCont.appendChild(btn);
   });
 
-  document.getElementById('bold').addEventListener('mousedown', e => e.preventDefault());
-  // стили Bold/Underline
   const btnBold = document.getElementById('bold');
   const btnUnder = document.getElementById('underline');
-  btnBold.addEventListener('mousedown', e => e.preventDefault());
-  btnUnder.addEventListener('mousedown', e => e.preventDefault());
-  btnBold.addEventListener('click', e => { e.preventDefault(); wrap('bold', 1); });
-  btnUnder.addEventListener('click', e => { e.preventDefault(); wrap('underline', 4); });
+  [btnBold, btnUnder].forEach(btn => btn.addEventListener('mousedown', e => e.preventDefault()));
+  btnBold.addEventListener('click', e => { e.preventDefault(); wrap('bold',1); });
+  btnUnder.addEventListener('click', e => { e.preventDefault(); wrap('underline',4); });
+
   document.getElementById('clear').addEventListener('click', () => {
     const sel = window.getSelection(); if (!sel.rangeCount) return;
     const range = sel.getRangeAt(0);
     const frag = range.extractContents();
     const cleanFrag = document.createDocumentFragment();
-    const clean = node => {
-      if (node.nodeType === 1 && node.tagName === 'SPAN') node.childNodes.forEach(clean);
+    const cleanNode = node => {
+      if (node.nodeType===1 && node.tagName==='SPAN') node.childNodes.forEach(cleanNode);
       else cleanFrag.appendChild(node.cloneNode(true));
     };
-    frag.childNodes.forEach(clean);
+    frag.childNodes.forEach(cleanNode);
     range.insertNode(cleanFrag);
     sel.removeAllRanges();
   });
 
   function generateANSI(root) {
-  let out = '';
-  const tokens = [];
-  Array.from(root.childNodes).forEach(n => {
-    if (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'DIV') {
-      Array.from(n.childNodes).forEach(child => tokens.push(child));
-      tokens.push({ newline: true });
-    } else {
-      tokens.push(n);
-    }
-  });
-  const paras = [];
-  let cur = [];
-  tokens.forEach(tok => {
-    if (tok.newline) {
-      paras.push(cur);
-      cur = [];
-    } else if (tok.nodeType) {
-      cur.push(tok);
-    }
-  });
-  paras.push(cur);
-  paras.forEach(nodes => {
-    const chars = [];
-    function rec(node, fmt) {
-      const f = { ...fmt };
-      if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'SPAN') {
-        if (node.dataset.bold) f.bold = true;
-        if (node.dataset.underline) f.underline = true;
-        if (node.dataset.fg) f.fg = +node.dataset.fg;
-        if (node.dataset.bg) f.bg = +node.dataset.bg;
+    let out = '';
+    // Собираем абзацы по DIV и BR
+    const paras = [];
+    let cur = [];
+    root.childNodes.forEach(n => {
+      if (n.nodeType===1 && n.tagName==='DIV') {
+        // вложенные span/text
+        n.childNodes.forEach(c => cur.push(c));
+        paras.push(cur);
+        cur = [];
+      } else if (n.nodeType===1 && n.tagName==='BR') {
+        paras.push(cur);
+        cur = [];
+      } else {
+        cur.push(n);
       }
-      if (node.nodeType === Node.TEXT_NODE) {
-        node.textContent.split('').forEach(ch => chars.push({ ch, fmt: { ...f } }));
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        if (node.tagName === 'BR') {
-          chars.push({ ch: '
-', fmt: {} });
-        } else {
-          node.childNodes.forEach(c => rec(c, f));
-        }
-      }
-    }
-    nodes.forEach(n => rec(n, {}));
-    const hasColor = chars.some(i => i.fmt.fg != null || i.fmt.bg != null);
-    if (hasColor) {
-      out += '```ansi
-';
-      let prevCodes = '';
-      chars.forEach(item => {
-        const f = item.fmt;
-        if (item.ch !== '
-') {
-          const codes = [];
-          if (f.bold) codes.push(1);
-          if (f.underline) codes.push(4);
-          if (f.fg != null) codes.push(f.fg);
-          if (f.bg != null) codes.push(f.bg);
-          else codes.push(49);
-          const codeStr = codes.join(';');
-          if (codeStr !== prevCodes) {
-            out += ESC + '[' + codeStr + 'm';
-            prevCodes = codeStr;
-          }
-        }
-        out += item.ch;
-      });
-      out += ESC + '[0;0;0;0m
-```
-';
-    } else {
-      let line = '';
-      chars.forEach(item => {
-        if (item.fmt.bold && item.ch.trim()) line += '**' + item.ch + '**';
-        else line += item.ch;
-      });
-      out += line + '
-';
-    }
-  });
-  return out;
-}
+    });
+    if (cur.length) paras.push(cur);
 
-document.getElementById('copy').addEventListener('click', e => { e.preventDefault();.addEventListener('click', e => { e.preventDefault();
-    const txt = generateANSI(document.getElementById('editor'));
-    navigator.clipboard.writeText(txt).then(() => {
-      const t = document.getElementById('toast'); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1500);
+    paras.forEach(nodes => {
+      const chars = [];
+      const recurse = (node,fmt) => {
+        const f = {...fmt};
+        if (node.nodeType===1 && node.tagName==='SPAN') {
+          if (node.dataset.bold) f.bold=true;
+          if (node.dataset.underline) f.underline=true;
+          if (node.dataset.fg) f.fg=+node.dataset.fg;
+          if (node.dataset.bg) f.bg=+node.dataset.bg;
+        }
+        if (node.nodeType===3) {
+          node.textContent.split('').forEach(ch => chars.push({ch,fmt:{...f}}));
+        } else if (node.nodeType===1) {
+          if (node.tagName==='BR') chars.push({ch:'\n',fmt:{}});
+          else node.childNodes.forEach(c=>recurse(c,f));
+        }
+      };
+      nodes.forEach(n=>recurse(n,{}));
+
+      const hasColor = chars.some(c=>c.fmt.fg!=null||c.fmt.bg!=null);
+      if (hasColor) {
+        out += '```ansi\n';
+        let prev="";
+        chars.forEach(item=>{
+          const {ch,fmt} = item;
+          if (ch!=='\n') {
+            const codes = [];
+            if (fmt.bold) codes.push(1);
+            if (fmt.underline) codes.push(4);
+            if (fmt.fg!=null) codes.push(fmt.fg);
+            if (fmt.bg!=null) codes.push(fmt.bg);
+            else codes.push(49);
+            const codeStr = codes.join(';');
+            if (codeStr!==prev) {
+              out+=ESC+'['+codeStr+'m';
+              prev=codeStr;
+            }
+          }
+          out+=ch;
+        });
+        out+=ESC+'[0m\n```\n';
+      } else {
+        let line='';
+        chars.forEach(item=>{
+          if (item.fmt.bold && item.ch.trim()) line+='**'+item.ch+'**';
+          else line+=item.ch;
+        });
+        out+=line+'\n';
+      }
+    });
+    return out;
+  }
+
+  document.getElementById('copy').addEventListener('click',e=>{
+    e.preventDefault();
+    const txt=generateANSI(document.getElementById('editor'));
+    navigator.clipboard.writeText(txt).then(()=>{
+      const t=document.getElementById('toast'); t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'),1500);
     });
   });
 </script>
