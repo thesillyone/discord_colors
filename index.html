@@ -340,6 +340,32 @@ editor.addEventListener('keydown', function(e) {
         setTimeout(() => t.classList.remove('show'), 1500);
       });
     };
+    // Обработка вставки текста (Ctrl+V): каждый символ в обёртку
+editor.addEventListener('paste', function(e) {
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+
+  const frag = document.createDocumentFragment();
+  for (const char of text) {
+    if (char === '\n') {
+      const br = document.createElement('br');
+      frag.appendChild(br);
+    } else {
+      const span = document.createElement('span');
+      span.textContent = char;
+      frag.appendChild(span);
+    }
+  }
+  range.deleteContents();
+  range.insertNode(frag);
+  range.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  updateToolbarState();
+});
   </script>
 </body>
 </html>
