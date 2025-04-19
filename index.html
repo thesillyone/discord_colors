@@ -1,32 +1,32 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Генератор ANSI‑блоков для Discord</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: sans-serif; background: #f3f4f6; }
-    #editor { width: 100%; max-width: 800px; min-height: 300px; margin: auto; padding: 1rem; background: #fff; border: 1px solid #ddd; border-radius: 0.5rem; white-space: pre-wrap; }
-    .toolbar { position: fixed; top: 1rem; right: 1rem; width: 200px; background: #fff; padding: 1rem; border: 1px solid #ddd; border-radius: 0.5rem; }
-    .toolbar button { width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; border: 1px solid #ccc; border-radius: 0.25rem; cursor: pointer; }
-    .toolbar .palette { display: grid; grid-template-columns: repeat(4,1fr); gap: 0.25rem; margin-bottom: 0.5rem; }
-    .palette button { width: 100%; height: 1.5rem; border: 1px solid #ccc; }
-    #toast { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 0.5rem 1rem; border-radius: 0.5rem; opacity: 0; transition: opacity 0.3s; }
-    #toast.show { opacity: 1; }
+    #editor { width:100%; max-width:800px; min-height:300px; margin:2rem auto; padding:1rem; background:#fff; border:1px solid #ddd; border-radius:.5rem; white-space: pre-wrap; }
+    .toolbar { position:fixed; top:1rem; right:1rem; width:220px; background:#fff; padding:1rem; border:1px solid #ddd; border-radius:.5rem; }
+    .toolbar button { width:100%; margin-bottom:.5rem; padding:.5rem; border:1px solid #ccc; border-radius:.25rem; cursor:pointer; }
+    .toolbar .palette { display:grid; grid-template-columns:repeat(4,1fr); gap:.25rem; margin-bottom:.5rem; }
+    .palette button { width:100%; height:1.5rem; border:1px solid #ccc; }
+    #toast { position:fixed; bottom:1rem; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); color:#fff; padding:.5rem 1rem; border-radius:.5rem; opacity:0; transition:opacity .3s; }
+    #toast.show { opacity:1; }
   </style>
 </head>
 <body>
-  <h1 style="text-align:center;">Генератор ANSI‑блоков для Discord</h1>
-  <div id="editor" contenteditable="true"></div>
+  <h1 style="text-align:center; margin-top:1rem;">Генератор ANSI‑блоков для Discord</h1>
+  <div id="editor" contenteditable></div>
   <div class="toolbar">
     <button id="copy">Скопировать в Discord</button>
     <button id="clear">Очистить форматирование</button>
-    <div style="margin-top:1rem; font-weight:bold;">Цвет текста</div>
+    <div style="font-weight:bold; margin-top:1rem;">Цвет текста</div>
     <div id="fg-palette" class="palette"></div>
     <div style="font-weight:bold;">Цвет фона</div>
     <div id="bg-palette" class="palette"></div>
-    <div style="font-weight:bold; margin-top:0.5rem;">Стили</div>
+    <div style="font-weight:bold; margin-top:.5rem;">Стили</div>
     <button id="bold">B</button>
     <button id="underline">U</button>
   </div>
@@ -34,69 +34,85 @@
 <script>
   const ESC = '\u001b';
   const colors = ['gray','red','green','yellow','blue','magenta','cyan','white'];
-  const codes = [30,31,32,33,34,35,36,37];
-
+  const fgCodes = [30,31,32,33,34,35,36,37];
+  const bgCodes = fgCodes.map(c=>c+10);
   function wrapWithSpan(type, value) {
     const sel = window.getSelection(); if(!sel.rangeCount) return;
     const range = sel.getRangeAt(0);
     const span = document.createElement('span');
     span.dataset[type] = value;
-    if(type==='fg') span.style.color = colors[codes.indexOf(value)];
-    if(type==='bg') span.style.backgroundColor = colors[codes.indexOf(value)];
+    if(type==='fg') span.style.color = colors[fgCodes.indexOf(value)];
+    if(type==='bg') span.style.backgroundColor = colors[fgCodes.indexOf(value)];
     if(type==='bold') span.style.fontWeight = 'bold';
     if(type==='underline') span.style.textDecoration = 'underline';
     span.appendChild(range.extractContents());
     range.insertNode(span);
     sel.removeAllRanges();
   }
-
   // build palettes
-  const fg = document.getElementById('fg-palette');
-  const bg = document.getElementById('bg-palette');
-  codes.forEach((c,i)=>{
-    const b1 = document.createElement('button'); b1.style.background = colors[i];
-    b1.onclick = () => wrapWithSpan('fg', c);
-    fg.appendChild(b1);
-    const b2 = document.createElement('button'); b2.style.background = colors[i];
-    b2.onclick = () => wrapWithSpan('bg', c+10);
-    bg.appendChild(b2);
-  });
-  document.getElementById('bold').onclick = () => wrapWithSpan('bold',1);
-  document.getElementById('underline').onclick = () => wrapWithSpan('underline',4);
-  document.getElementById('clear').onclick = () => document.getElementById('editor').innerText = document.getElementById('editor').innerText;
+  const fg = document.getElementById('fg-palette'), bg = document.getElementById('bg-palette');
+  fgCodes.forEach((c,i)=>{ const b=document.createElement('button'); b.style.background=colors[i]; b.onclick=()=>wrapWithSpan('fg',c); fg.appendChild(b); });
+  bgCodes.forEach((c,i)=>{ const b=document.createElement('button'); b.style.background=colors[i]; b.onclick=()=>wrapWithSpan('bg',c); bg.appendChild(b); });
+  document.getElementById('bold').onclick=()=>wrapWithSpan('bold',1);
+  document.getElementById('underline').onclick=()=>wrapWithSpan('underline',4);
+  document.getElementById('clear').onclick=()=>{ const ed=document.getElementById('editor'); ed.innerText=ed.innerText; };
 
   function generateANSI(root) {
-    let out = '```ansi\n';
-    let prev = [];
-    function emitCodes(codes) {
-      out += ESC + '[' + codes.join(';') + 'm';
-    }
-    function walk(node) {
-      if(node.nodeType===3) { out+=node.textContent; return; }
-      if(node.nodeType!==1) return;
-      if(node.tagName==='BR') { out+='\n'; return; }
-      if(node.tagName==='SPAN') {
-        const cur = [];
-        if(node.dataset.bold) cur.push('1');
-        if(node.dataset.underline) cur.push('4');
-        if(node.dataset.fg) cur.push(node.dataset.fg);
-        if(node.dataset.bg) cur.push(node.dataset.bg);
-        if(JSON.stringify(cur)!==JSON.stringify(prev)) { emitCodes(cur); prev = cur; }
-        Array.from(node.childNodes).forEach(walk);
-        return;
+    let out='';
+    // collect paragraphs: split by <br> or block-level
+    const paras = [];
+    let cur=[];
+    root.childNodes.forEach(node=>{
+      if(node.nodeType===1 && node.tagName==='BR') { paras.push(cur); cur=[]; }
+      else cur.push(node);
+    });
+    paras.push(cur);
+    paras.forEach(nodes=>{
+      // merge nodes to a temp span for processing
+      const temp = document.createElement('span');
+      nodes.forEach(n=>temp.appendChild(n.cloneNode(true)));
+      // check color presence
+      const hasColor = temp.querySelector('[data-fg], [data-bg]')!=null;
+      const hasBold = temp.querySelector('[data-bold]')!=null;
+      if(hasColor) {
+        out += '```ansi\n';
+        let prevCodes=[];
+        function emitCodes(codes){ out += ESC+'['+codes.join(';')+'m'; prevCodes=codes.slice(); }
+        function walk(node) {
+          if(node.nodeType===3) { out+=node.textContent; return; }
+          if(node.tagName==='SPAN') {
+            const codes=[];
+            if(node.dataset.bold) codes.push('1');
+            if(node.dataset.underline) codes.push('4');
+            if(node.dataset.fg) codes.push(node.dataset.fg);
+            if(node.dataset.bg) codes.push(node.dataset.bg);
+            if(JSON.stringify(codes)!==JSON.stringify(prevCodes)) emitCodes(codes);
+            Array.from(node.childNodes).forEach(walk);
+          } else if(node.tagName==='BR') out+='\n';
+          else Array.from(node.childNodes).forEach(walk);
+        }
+        walk(temp);
+        out += ESC+'[0m\n```\n';
+      } else if(hasBold) {
+        // markdown bold
+        let line='';
+        temp.childNodes.forEach(n=>{
+          if(n.nodeType===3) line+=n.textContent;
+          else if(n.dataset.bold) line+='**'+n.textContent+'**';
+          else line+=n.textContent;
+        });
+        out += line+'\n';
+      } else {
+        out += temp.textContent+'\n';
       }
-      Array.from(node.childNodes).forEach(walk);
-    }
-    walk(root);
-    out += ESC + '[0m\n```';
+    });
     return out;
   }
 
-  document.getElementById('copy').onclick = () => {
-    const text = generateANSI(document.getElementById('editor'));
+  document.getElementById('copy').onclick=()=>{
+    const text=generateANSI(document.getElementById('editor'));
     navigator.clipboard.writeText(text).then(()=>{
-      const t = document.getElementById('toast'); t.classList.add('show');
-      setTimeout(()=>t.classList.remove('show'),1500);
+      const t=document.getElementById('toast'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500);
     });
   };
 </script>
