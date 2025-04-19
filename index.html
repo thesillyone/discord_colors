@@ -18,14 +18,15 @@
   </div>
 
   <div class="fixed top-24 right-4 w-60 bg-white p-4 rounded-lg shadow-lg">
-    <button id="copy" class="w-full bg-green-600 text-white py-2 rounded-lg mb-4">Скопировать в Discord</button>
+    <button id="copy" class="w-full bg-green-600 text-white py-2 rounded-lg mb-2">Скопировать в Discord</button>
+    <button id="clear" class="w-full bg-red-500 text-white py-2 rounded-lg mb-4">Очистить текст</button>
     <div class="mb-2 font-semibold">Цвета</div>
     <div id="palette" class="grid grid-cols-4 gap-1 mb-4"></div>
     <div class="mb-2 font-semibold">Стили</div>
     <div class="flex gap-2">
-      <button id="bold" title="Жирный" class="flex-1 border border-gray-400 rounded-lg py-1">Ж</button>
-      <button id="italic" title="Курсив" class="flex-1 border border-gray-400 rounded-lg py-1">К</button>
-      <button id="underline" title="Подчёркнутый" class="flex-1 border border-gray-400 rounded-lg py-1">П</button>
+      <button id="bold" title="Жирный" class="flex-1 border border-gray-400 rounded-lg py-1">B</button>
+      <button id="italic" title="Курсив" class="flex-1 border border-gray-400 rounded-lg py-1">I</button>
+      <button id="underline" title="Подчёркнутый" class="flex-1 border border-gray-400 rounded-lg py-1">U</button>
     </div>
   </div>
 
@@ -34,31 +35,16 @@
 <script>
   const ESC = '\u001b';
   const paletteData = [
-    // foreground
-    {code: '0;30', css: 'gray'},
-    {code: '0;31', css: 'red'},
-    {code: '0;32', css: 'green'},
-    {code: '0;33', css: 'yellow'},
-    {code: '0;34', css: 'blue'},
-    {code: '0;35', css: 'magenta'},
-    {code: '0;36', css: 'cyan'},
-    {code: '0;37', css: 'white'},
-    // background
-    {code: '0;40', css: 'darkblue'},
-    {code: '0;41', css: 'orange'},
-    {code: '0;42', css: 'skyblue'},
-    {code: '0;43', css: 'turquoise'},
-    {code: '0;44', css: 'gray'},
-    {code: '0;45', css: 'indigo'},
-    {code: '0;46', css: 'lightgray'},
-    {code: '0;47', css: 'white'}
+    {code: '0;30', css: 'gray'}, {code: '0;31', css: 'red'}, {code: '0;32', css: 'green'}, {code: '0;33', css: 'yellow'},
+    {code: '0;34', css: 'blue'}, {code: '0;35', css: 'magenta'}, {code: '0;36', css: 'cyan'}, {code: '0;37', css: 'white'},
+    {code: '0;40', css: 'darkblue'}, {code: '0;41', css: 'orange'}, {code: '0;42', css: 'skyblue'}, {code: '0;43', css: 'turquoise'},
+    {code: '0;44', css: 'gray'}, {code: '0;45', css: 'indigo'}, {code: '0;46', css: 'lightgray'}, {code: '0;47', css: 'white'}
   ];
   const palette = document.getElementById('palette');
   paletteData.forEach(item => {
     const btn = document.createElement('button');
-    btn.className = 'w-8 h-8 rounded-lg';
-    if (parseInt(item.code.split(';')[1]) < 40) btn.style.color = item.css;
-    else btn.style.backgroundColor = item.css;
+    btn.className = 'w-8 h-8 rounded-lg border';
+    btn.style.backgroundColor = item.css;
     btn.title = '[' + item.code + 'm';
     btn.dataset.ansi = ESC + '[' + item.code + 'm';
     btn.onclick = () => applyAnsi(btn.dataset.ansi);
@@ -70,24 +56,24 @@
     const range = sel.getRangeAt(0);
     const span = document.createElement('span');
     span.dataset.ansi = code;
-    // визуализация
-    const parts = code.match(/(\d+);(\d+)/);
-    const p2 = parseInt(parts[2]);
-    if (p2 < 40) span.style.color = paletteData.find(i => i.code.endsWith(parts[2])).css;
-    else span.style.backgroundColor = paletteData.find(i => i.code.endsWith(parts[2])).css;
+    // визуализация: аналогично кнопке
+    const item = paletteData.find(i => ESC + '[' + i.code + 'm === code);
+    if (parseInt(item.code.split(';')[1]) < 40) span.style.color = item.css;
+    else span.style.backgroundColor = item.css;
     range.surroundContents(span);
     sel.removeAllRanges();
   }
 
   // стили
   const styleButtons = {
-    bold: '[1m',
-    italic: '[2m',
-    underline: '[4m'
+    bold: '1;30',
+    italic: '2;30',
+    underline: '4;30'
   };
   Object.keys(styleButtons).forEach(id => {
     document.getElementById(id).onclick = () => {
-      const code = ESC + styleButtons[id];
+      const codeStr = styleButtons[id];
+      const code = ESC + '[' + codeStr + 'm';
       const sel = window.getSelection(); if (!sel.rangeCount) return;
       const range = sel.getRangeAt(0);
       const span = document.createElement('span');
@@ -99,6 +85,11 @@
       sel.removeAllRanges();
     };
   });
+
+  // очистка
+  document.getElementById('clear').onclick = () => {
+    document.getElementById('editor').innerHTML = '';
+  };
 
   // генерация текста
   function generate(root) {
