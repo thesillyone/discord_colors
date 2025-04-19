@@ -7,11 +7,13 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: sans-serif; background: #f3f4f6; }
-    #editor { width:100%; max-width:800px; min-height:300px; margin:2rem auto; padding:1rem; background:#fff; border:1px solid #ddd; border-radius:.5rem; white-space: pre-wrap; }
+    #editor { width:100%; max-width:800px; min-height:200px; margin:2rem auto; padding:1rem; background:#fff; border:1px solid #ddd; border-radius:.5rem; white-space: pre-wrap; }
     .toolbar { position:fixed; top:1rem; right:1rem; width:220px; background:#fff; padding:1rem; border:1px solid #ddd; border-radius:.5rem; }
-    .toolbar button { width:100%; margin-bottom:.5rem; padding:.5rem; border:1px solid #ccc; border-radius:.25rem; cursor:pointer; }
+    .toolbar button { width:100%; margin-bottom:.5rem; padding:.5rem; border:1px solid #ccc; border-radius:.25rem; cursor:pointer; background:#fafafa; }
     .toolbar .palette { display:grid; grid-template-columns:repeat(4,1fr); gap:.25rem; margin-bottom:.5rem; }
-    .palette button { width:100%; height:1.5rem; border:1px solid #ccc; }
+    .palette button { width:100%; height:1.5rem; border:1px solid #ccc; padding:0; }
+    #bold { font-weight:bold; }
+    #underline { text-decoration:underline; }
     #toast { position:fixed; bottom:1rem; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); color:#fff; padding:.5rem 1rem; border-radius:.5rem; opacity:0; transition:opacity .3s; }
     #toast.show { opacity:1; }
   </style>
@@ -32,88 +34,67 @@
   </div>
   <div id="toast">Скопировано!</div>
 <script>
-  const ESC = '\u001b';
-  const colors = ['gray','red','green','yellow','blue','magenta','cyan','white'];
-  const fgCodes = [30,31,32,33,34,35,36,37];
-  const bgCodes = fgCodes.map(c=>c+10);
-  function wrapWithSpan(type, value) {
-    const sel = window.getSelection(); if(!sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    const span = document.createElement('span');
-    span.dataset[type] = value;
-    if(type==='fg') span.style.color = colors[fgCodes.indexOf(value)];
-    if(type==='bg') span.style.backgroundColor = colors[fgCodes.indexOf(value)];
-    if(type==='bold') span.style.fontWeight = 'bold';
-    if(type==='underline') span.style.textDecoration = 'underline';
+  const ESC='\u001b';
+  const colors=['gray','red','green','yellow','blue','magenta','cyan','white'];
+  const fgCodes=[30,31,32,33,34,35,36,37];
+  const bgCodes=fgCodes.map(c=>c+10);
+  function wrap(type,value){
+    const sel=window.getSelection(); if(!sel.rangeCount) return;
+    const range=sel.getRangeAt(0);
+    const span=document.createElement('span');
+    if(type==='fg'){ span.dataset.fg=value; span.style.color=colors[fgCodes.indexOf(value)]; }
+    if(type==='bg'){ span.dataset.bg=value; span.style.backgroundColor=colors[fgCodes.indexOf(value-10)]; }
+    if(type==='bold'){ span.dataset.bold=1; span.style.fontWeight='bold'; }
+    if(type==='underline'){ span.dataset.underline=4; span.style.textDecoration='underline'; }
     span.appendChild(range.extractContents());
     range.insertNode(span);
     sel.removeAllRanges();
   }
-  // build palettes
-  const fg = document.getElementById('fg-palette'), bg = document.getElementById('bg-palette');
-  fgCodes.forEach((c,i)=>{ const b=document.createElement('button'); b.style.background=colors[i]; b.onclick=()=>wrapWithSpan('fg',c); fg.appendChild(b); });
-  bgCodes.forEach((c,i)=>{ const b=document.createElement('button'); b.style.background=colors[i]; b.onclick=()=>wrapWithSpan('bg',c); bg.appendChild(b); });
-  document.getElementById('bold').onclick=()=>wrapWithSpan('bold',1);
-  document.getElementById('underline').onclick=()=>wrapWithSpan('underline',4);
+  const fg=document.getElementById('fg-palette'), bg=document.getElementById('bg-palette');
+  fgCodes.forEach((c,i)=>{ const b=document.createElement('button'); b.style.background=colors[i]; b.onclick=()=>wrap('fg',c); fg.appendChild(b); });
+  bgCodes.forEach((c,i)=>{ const b=document.createElement('button'); b.style.background=colors[i]; b.onclick=()=>wrap('bg',c); bg.appendChild(b); });
+  document.getElementById('bold').onclick=()=>wrap('bold');
+  document.getElementById('underline').onclick=()=>wrap('underline');
   document.getElementById('clear').onclick=()=>{ const ed=document.getElementById('editor'); ed.innerText=ed.innerText; };
-
-  function generateANSI(root) {
+  function generateANSI(root){
     let out='';
-    // collect paragraphs: split by <br> or block-level
-    const paras = [];
+    const paras=[];
     let cur=[];
-    root.childNodes.forEach(node=>{
-      if(node.nodeType===1 && node.tagName==='BR') { paras.push(cur); cur=[]; }
-      else cur.push(node);
-    });
+    root.childNodes.forEach(n=>{ if(n.nodeType===1 && n.tagName==='BR'){ paras.push(cur); cur=[]; } else cur.push(n); });
     paras.push(cur);
     paras.forEach(nodes=>{
-      // merge nodes to a temp span for processing
-      const temp = document.createElement('span');
-      nodes.forEach(n=>temp.appendChild(n.cloneNode(true)));
-      // check color presence
-      const hasColor = temp.querySelector('[data-fg], [data-bg]')!=null;
-      const hasBold = temp.querySelector('[data-bold]')!=null;
-      if(hasColor) {
-        out += '```ansi\n';
-        let prevCodes=[];
-        function emitCodes(codes){ out += ESC+'['+codes.join(';')+'m'; prevCodes=codes.slice(); }
-        function walk(node) {
-          if(node.nodeType===3) { out+=node.textContent; return; }
-          if(node.tagName==='SPAN') {
+      const temp=document.createElement('span'); nodes.forEach(n=>temp.appendChild(n.cloneNode(true)));
+      const hasColor=temp.querySelector('[data-fg], [data-bg]'), hasBold=temp.querySelector('[data-bold]');
+      if(hasColor){
+        out+='```ansi\n'; let prev=[];
+        function emit(codes){ out+=ESC+'['+(codes.length?codes.join(';'):'0')+'m'; prev=codes.slice(); }
+        function walk(n){
+          if(n.nodeType===3){ if(prev.length) emit([]); out+=n.textContent; return; }
+          if(n.nodeType!==1) return;
+          if(n.tagName==='BR'){ out+='\n'; return; }
+          if(n.tagName==='SPAN'){
             const codes=[];
-            if(node.dataset.bold) codes.push('1');
-            if(node.dataset.underline) codes.push('4');
-            if(node.dataset.fg) codes.push(node.dataset.fg);
-            if(node.dataset.bg) codes.push(node.dataset.bg);
-            if(JSON.stringify(codes)!==JSON.stringify(prevCodes)) emitCodes(codes);
-            Array.from(node.childNodes).forEach(walk);
-          } else if(node.tagName==='BR') out+='\n';
-          else Array.from(node.childNodes).forEach(walk);
+            if(n.dataset.bold) codes.push('1');
+            if(n.dataset.underline) codes.push('4');
+            if(n.dataset.fg) codes.push(n.dataset.fg);
+            if(n.dataset.bg) codes.push(n.dataset.bg);
+            if(JSON.stringify(codes)!==JSON.stringify(prev)) emit(codes);
+            Array.from(n.childNodes).forEach(walk);
+          } else Array.from(n.childNodes).forEach(walk);
         }
         walk(temp);
-        out += ESC+'[0m\n```\n';
-      } else if(hasBold) {
-        // markdown bold
-        let line='';
-        temp.childNodes.forEach(n=>{
-          if(n.nodeType===3) line+=n.textContent;
-          else if(n.dataset.bold) line+='**'+n.textContent+'**';
-          else line+=n.textContent;
-        });
-        out += line+'\n';
-      } else {
-        out += temp.textContent+'\n';
-      }
+        if(prev.length) out+=ESC+'[0m';
+        out+='\n```\n';
+      } else if(hasBold){
+        let line=''; temp.childNodes.forEach(n=>{ if(n.nodeType===3) line+=n.textContent; else if(n.dataset.bold) line+='**'+n.textContent+'**'; else line+=n.textContent; });
+        out+=line+'\n';
+      } else out+=temp.textContent+'\n';
     });
     return out;
   }
-
   document.getElementById('copy').onclick=()=>{
-    const text=generateANSI(document.getElementById('editor'));
-    navigator.clipboard.writeText(text).then(()=>{
-      const t=document.getElementById('toast'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500);
-    });
+    const txt=generateANSI(document.getElementById('editor'));
+    navigator.clipboard.writeText(txt).then(()=>{ const t=document.getElementById('toast'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500); });
   };
 </script>
 </body>
