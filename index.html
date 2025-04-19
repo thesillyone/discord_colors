@@ -7,118 +7,128 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     #editor span { font-style: italic; }
-    /* Toast */
-    .toast {
-      position: fixed;
-      bottom: 2rem;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.8);
-      color: #fff;
-      padding: 0.5rem 1rem;
-      border-radius: 0.5rem;
-      opacity: 0;
-      transition: opacity 0.3s;
-      pointer-events: none;
-    }
+    .toast { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); color: #fff; padding: 0.5rem 1rem; border-radius: 0.5rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
     .toast.show { opacity: 1; }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen p-4">
   <h1 class="text-2xl font-bold mb-4 text-center">Генератор ANSI‑блоков для Discord</h1>
-
   <div class="max-w-6xl mx-auto">
     <div id="editor" contenteditable="true" class="border border-gray-300 rounded-lg p-4 bg-white min-h-[500px] whitespace-pre-wrap"></div>
   </div>
 
-  <!-- Панель инструментов -->
-  <div class="fixed top-24 right-4 w-60 flex flex-col gap-4 bg-white p-4 rounded-lg shadow-lg">
-    <button id="copy" class="bg-green-600 text-white py-2 rounded-lg">Скопировать в Discord</button>
-    <div class="flex items-center gap-2">
-      <input type="color" id="colorPicker" value="#22a034" class="w-10 h-10 p-0 border-0 cursor-pointer" title="Цвет"/>
-      <button id="applyColor" class="bg-blue-600 text-white flex-1 py-2 rounded-lg">Применить</button>
+  <div class="fixed top-24 right-4 w-60 bg-white p-4 rounded-lg shadow-lg">
+    <button id="copy" class="w-full bg-green-600 text-white py-2 rounded-lg mb-4">Скопировать в Discord</button>
+    <div class="mb-2 font-semibold">Цвета</div>
+    <div id="palette" class="grid grid-cols-4 gap-1 mb-4"></div>
+    <div class="mb-2 font-semibold">Стили</div>
+    <div class="flex gap-2">
+      <button id="bold" title="Жирный" class="flex-1 border border-gray-400 rounded-lg py-1">Ж</button>
+      <button id="italic" title="Курсив" class="flex-1 border border-gray-400 rounded-lg py-1">К</button>
+      <button id="underline" title="Подчёркнутый" class="flex-1 border border-gray-400 rounded-lg py-1">П</button>
     </div>
-    <div id="palette" class="grid grid-cols-5 gap-1"></div>
   </div>
 
   <div id="toast" class="toast">Скопировано!</div>
 
 <script>
-  // Палитра (25 цветов)
-  const preset = [
-    '#fff9c4','#fff176','#ffee58','#ffeb3b','#fdd835',
-    '#c8e6c9','#a5d6a7','#81c784','#4caf50','#388e3c',
-    '#ffcdd2','#ef9a9a','#e57373','#f44336','#d32f2f',
-    '#bbdefb','#90caf9','#64b5f6','#2196f3','#1976d2',
-    '#e1bee7','#ce93d8','#ba68c8','#9c27b0','#7b1fa2'
+  const ESC = '\u001b';
+  const paletteData = [
+    // foreground
+    {code: '0;30', css: 'gray'},
+    {code: '0;31', css: 'red'},
+    {code: '0;32', css: 'green'},
+    {code: '0;33', css: 'yellow'},
+    {code: '0;34', css: 'blue'},
+    {code: '0;35', css: 'magenta'},
+    {code: '0;36', css: 'cyan'},
+    {code: '0;37', css: 'white'},
+    // background
+    {code: '0;40', css: 'darkblue'},
+    {code: '0;41', css: 'orange'},
+    {code: '0;42', css: 'skyblue'},
+    {code: '0;43', css: 'turquoise'},
+    {code: '0;44', css: 'gray'},
+    {code: '0;45', css: 'indigo'},
+    {code: '0;46', css: 'lightgray'},
+    {code: '0;47', css: 'white'}
   ];
   const palette = document.getElementById('palette');
-  const picker = document.getElementById('colorPicker');
-
-  function applyColor(col) {
-    document.execCommand('styleWithCSS', true, null);
-    document.execCommand('foreColor', false, col);
-  }
-  document.getElementById('applyColor').onclick = () => applyColor(picker.value);
-
-  preset.forEach(c => {
-    const b = document.createElement('button');
-    b.className = 'w-8 h-8 rounded-lg border border-gray-300';
-    b.style.background = c;
-    b.title = c;
-    b.onclick = () => { picker.value = c; applyColor(c); };
-    palette.appendChild(b);
+  paletteData.forEach(item => {
+    const btn = document.createElement('button');
+    btn.className = 'w-8 h-8 rounded-lg';
+    if (parseInt(item.code.split(';')[1]) < 40) btn.style.color = item.css;
+    else btn.style.backgroundColor = item.css;
+    btn.title = '[' + item.code + 'm';
+    btn.dataset.ansi = ESC + '[' + item.code + 'm';
+    btn.onclick = () => applyAnsi(btn.dataset.ansi);
+    palette.appendChild(btn);
   });
 
-  // ANSI генерация
-  const ESC = '\u001b';
-  function rgbToAnsi(rgb) {
-    const m = rgb.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-    if (!m) return '';
-    const [r, g, b] = m.slice(1).map(Number);
-    return `${ESC}[38;2;${r};${g};${b}m`;
+  function applyAnsi(code) {
+    const sel = window.getSelection(); if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const span = document.createElement('span');
+    span.dataset.ansi = code;
+    // визуализация
+    const parts = code.match(/(\d+);(\d+)/);
+    const p2 = parseInt(parts[2]);
+    if (p2 < 40) span.style.color = paletteData.find(i => i.code.endsWith(parts[2])).css;
+    else span.style.backgroundColor = paletteData.find(i => i.code.endsWith(parts[2])).css;
+    range.surroundContents(span);
+    sel.removeAllRanges();
   }
 
+  // стили
+  const styleButtons = {
+    bold: '[1m',
+    italic: '[2m',
+    underline: '[4m'
+  };
+  Object.keys(styleButtons).forEach(id => {
+    document.getElementById(id).onclick = () => {
+      const code = ESC + styleButtons[id];
+      const sel = window.getSelection(); if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const span = document.createElement('span');
+      span.dataset.ansi = code;
+      if (id === 'bold') span.style.fontWeight = 'bold';
+      if (id === 'italic') span.style.fontStyle = 'italic';
+      if (id === 'underline') span.style.textDecoration = 'underline';
+      range.surroundContents(span);
+      sel.removeAllRanges();
+    };
+  });
+
+  // генерация текста
   function generate(root) {
     let out = '';
     let inside = false;
     function open() { if (!inside) { out += '```ansi\n'; inside = true; } }
     function close() { if (inside) { out += '\n```'; inside = false; } }
-
     function walk(node) {
       if (node.nodeType === Node.TEXT_NODE) {
-        const txt = node.textContent;
-        out += txt;
-        // закрываем только если есть видимые символы и цвет не применён
-        if (/\S/.test(txt) && !node.parentElement.style.color) close();
+        out += node.textContent;
+        if (/\S/.test(node.textContent) && !node.parentElement.dataset.ansi) close();
         return;
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       if (node.tagName === 'BR') { out += '\n'; return; }
-
-      const col = node.style.color;
-      if (col) {
-        open();
-        out += rgbToAnsi(col);
+      if (node.dataset.ansi) {
+        open(); out += node.dataset.ansi;
         node.childNodes.forEach(walk);
-        out += `${ESC}[0m`;
-      } else {
-        node.childNodes.forEach(walk);
-      }
+        out += ESC + '[0m';
+      } else node.childNodes.forEach(walk);
     }
-
     root.childNodes.forEach(walk);
-    close();
-    return out.trim();
+    close(); return out.trim();
   }
 
-  // Копирование и уведомление
   document.getElementById('copy').onclick = () => {
     const text = generate(document.getElementById('editor'));
     navigator.clipboard.writeText(text).then(() => {
-      const t = document.getElementById('toast');
-      t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 1500);
+      const t = document.getElementById('toast'); t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1200);
     });
   };
 </script>
