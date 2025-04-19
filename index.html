@@ -8,7 +8,7 @@
   <style>
     body { font-family: sans-serif; background: #f3f4f6; }
     #editor { width:100%; max-width:800px; min-height:200px; margin:2rem auto; padding:1rem; background:#fff; border:1px solid #ddd; border-radius:.5rem; white-space: pre-wrap; }
-    .toolbar { position:fixed; top:1rem; right:1rem; width:220px; background:#fff; padding:1rem; border:1px solid #ddd; border-radius:.5rem; }
+    .toolbar { position:fixed; top:1rem; right:1rem; width:240px; background:#fff; padding:1rem; border:1px solid #ddd; border-radius:.5rem; }
     .toolbar button { width:100%; margin-bottom:.5rem; padding:.5rem; border:1px solid #ccc; border-radius:.25rem; cursor:pointer; background:#fafafa; }
     .toolbar .palette { display:grid; grid-template-columns:repeat(4,1fr); gap:.25rem; margin-bottom:.5rem; }
     .palette button { width:100%; height:1.5rem; border:1px solid #ccc; padding:0; }
@@ -34,119 +34,95 @@
   </div>
   <div id="toast">Скопировано!</div>
 <script>
-  const ESC = '\u001b';
-  const colors = ['gray','red','green','yellow','blue','magenta','cyan','white'];
-  const fgCodes = [30,31,32,33,34,35,36,37];
-  const bgCodes = fgCodes.map(c => c + 10);
+  const ESC='\u001b';
+  // Точные CSS цвета фоновых кодов Discord ANSI
+  const bgCss = [
+    '#191919', // Firefly dark blue background (approx)
+    '#fc9533', // Orange background
+    '#2f74b5', // Marble blue background
+    '#5bc7a3', // Greyish turquoise
+    '#5c5c5c', // Gray background
+    '#5246a6', // Indigo background
+    '#d1d1d1', // Light gray background
+    '#ffffff'  // White background
+  ];
+  const fgCss = ['#7f8c8d','#e74c3c','#2ecc71','#f1c40f','#3498db','#9b59b6','#1abc9c','#ecf0f1'];
+  const fgCodes=[30,31,32,33,34,35,36,37];
+  const bgCodes=fgCodes.map(c=>c+10);
 
-  function wrap(type, value) {
-    const sel = window.getSelection(); if (!sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    const span = document.createElement('span');
-    if (type === 'fg') { span.dataset.fg = value; span.style.color = colors[fgCodes.indexOf(value)]; }
-    if (type === 'bg') { span.dataset.bg = value; span.style.backgroundColor = colors[bgCodes.indexOf(value)]; }
-    if (type === 'bold') { span.dataset.bold = '1'; span.style.fontWeight = 'bold'; }
-    if (type === 'underline') { span.dataset.underline = '4'; span.style.textDecoration = 'underline'; }
+  function wrap(type,value){
+    const sel=window.getSelection(); if(!sel.rangeCount) return;
+    const range=sel.getRangeAt(0);
+    const span=document.createElement('span');
+    span.dataset[type]=value;
+    if(type==='fg') span.style.color=fgCss[fgCodes.indexOf(value)];
+    if(type==='bg') span.style.backgroundColor=bgCss[bgCodes.indexOf(value)];
+    if(type==='bold') span.style.fontWeight='bold';
+    if(type==='underline') span.style.textDecoration='underline';
     span.appendChild(range.extractContents());
     range.insertNode(span);
     sel.removeAllRanges();
   }
+  const fgCont=document.getElementById('fg-palette'), bgCont=document.getElementById('bg-palette');
+  fgCodes.forEach((c,i)=>{ const b=document.createElement('button');b.style.background=fgCss[i];b.onclick=()=>wrap('fg',c);fgCont.appendChild(b);});
+  bgCodes.forEach((c,i)=>{ const b=document.createElement('button');b.style.background=bgCss[i];b.onclick=()=>wrap('bg',c);bgCont.appendChild(b);});
+  document.getElementById('bold').onclick=()=>wrap('bold',1);
+  document.getElementById('underline').onclick=()=>wrap('underline',4);
+  document.getElementById('clear').onclick=()=>{ const ed=document.getElementById('editor'); ed.innerText=ed.innerText; };
 
-  // Build palettes
-  const fgContainer = document.getElementById('fg-palette');
-  const bgContainer = document.getElementById('bg-palette');
-  fgCodes.forEach((code, i) => {
-    const btn = document.createElement('button'); btn.style.background = colors[i]; btn.onclick = () => wrap('fg', code); fgContainer.appendChild(btn);
-  });
-  bgCodes.forEach((code, i) => {
-    const btn = document.createElement('button'); btn.style.background = colors[i]; btn.onclick = () => wrap('bg', code); bgContainer.appendChild(btn);
-  });
-  document.getElementById('bold').onclick = () => wrap('bold');
-  document.getElementById('underline').onclick = () => wrap('underline');
-  document.getElementById('clear').onclick = () => { const ed = document.getElementById('editor'); ed.innerText = ed.innerText; };
-
-  function generateANSI(root) {
-    let out = '';
-    const paragraphs = [];
-    let current = [];
-    root.childNodes.forEach(node => {
-      if (node.nodeType === 1 && node.tagName === 'BR') {
-        paragraphs.push(current);
-        current = [];
-      } else {
-        current.push(node);
-      }
-    });
-    paragraphs.push(current);
-
-    paragraphs.forEach(nodes => {
-      const items = [];
-      function recurse(node, format) {
-        const newFormat = Object.assign({}, format);
-        if (node.nodeType === 1 && node.tagName === 'SPAN') {
-          if (node.dataset.bold) newFormat.bold = true;
-          if (node.dataset.underline) newFormat.underline = true;
-          if (node.dataset.fg) newFormat.fg = node.dataset.fg;
-          if (node.dataset.bg) newFormat.bg = node.dataset.bg;
+  function generateANSI(root){
+    let out='';
+    const paras=[]; let cur=[];
+    root.childNodes.forEach(n=>{ if(n.nodeType===1&&n.tagName==='BR'){paras.push(cur);cur=[];}else cur.push(n);} );
+    paras.push(cur);
+    paras.forEach(nodes=>{
+      const chars=[];
+      function rec(node,fmt){
+        const f=Object.assign({},fmt);
+        if(node.nodeType===1&&node.tagName==='SPAN'){
+          if(node.dataset.bold) f.bold=true;
+          if(node.dataset.underline) f.underline=true;
+          if(node.dataset.fg) f.fg=node.dataset.fg;
+          if(node.dataset.bg) f.bg=node.dataset.bg;
         }
-        if (node.nodeType === 3) {
-          for (let i = 0; i < node.textContent.length; i++) {
-            items.push({ char: node.textContent[i], format: newFormat });
-          }
-        } else if (node.nodeType === 1) {
-          if (node.tagName === 'BR') {
-            items.push({ char: '\n', format: {} });
-          } else {
-            Array.from(node.childNodes).forEach(child => recurse(child, newFormat));
-          }
+        if(node.nodeType===3){
+          node.textContent.split('').forEach(ch=>chars.push({ch,fmt:f}));
+        } else if(node.nodeType===1){
+          if(node.tagName==='BR') chars.push({ch:'\n',fmt:{}});
+          else Array.from(node.childNodes).forEach(c=>rec(c,f));
         }
       }
-      nodes.forEach(n => recurse(n, {}));
-
-      const hasColor = items.some(i => i.format.fg != null || i.format.bg != null);
-      if (hasColor) {
-        out += '```ansi\n';
-        let prev = { bold: false, underline: false, fg: null, bg: null };
-        items.forEach(item => {
-          const fmt = item.format;
-          const ch = item.char;
-          if (ch !== ' ' && ch !== '\n' && (
-              fmt.bold !== prev.bold ||
-              fmt.underline !== prev.underline ||
-              fmt.fg !== prev.fg ||
-              fmt.bg !== prev.bg
-            )) {
-            const codes = [];
-            if (fmt.bold) codes.push('1');
-            if (fmt.underline) codes.push('4');
-            if (fmt.fg) codes.push(fmt.fg);
-            if (fmt.bg) codes.push(fmt.bg);
-            out += ESC + '[' + (codes.length ? codes.join(';') : '0') + 'm';
-            prev = Object.assign({}, fmt);
+      nodes.forEach(n=>rec(n,{}));
+      const hasColor=chars.some(i=>i.fmt.fg||i.fmt.bg);
+      if(hasColor){
+        out+='```ansi\n';
+        let prev={bold:false,underline:false,fg:null,bg:null};
+        chars.forEach(item=>{
+          const f=item.fmt;
+          if(item.ch!==' '&&item.ch!=='\n'&&(
+            f.bold!==prev.bold||f.underline!==prev.underline||f.fg!==prev.fg||f.bg!==prev.bg
+          )){
+            const codes=[ f.bold?1:0, f.underline?4:0, f.fg||0, f.bg||0 ];
+            out+=ESC+'['+codes.join(';')+'m';
+            prev=f;
           }
-          out += ch;
+          out+=item.ch;
         });
-        out += ESC + '[0m\n```\n';
+        out+=ESC+'[0;0;0;0m\n```\n';
       } else {
-        let line = '';
-        items.forEach(i => {
-          if (i.format.bold && i.char.trim() !== '') {
-            line += '**' + i.char + '**';
-          } else {
-            line += i.char;
-          }
+        let line='';
+        chars.forEach(item=>{
+          if(item.fmt.bold&&item.ch.trim()) line+='**'+item.ch+'**';
+          else line+=item.ch;
         });
-        out += line + '\n';
+        out+=line+'\n';
       }
     });
     return out;
   }
-
-  document.getElementById('copy').onclick = () => {
-    const text = generateANSI(document.getElementById('editor'));
-    navigator.clipboard.writeText(text).then(() => {
-      const t = document.getElementById('toast'); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1500);
-    });
+  document.getElementById('copy').onclick=()=>{
+    const txt=generateANSI(document.getElementById('editor'));
+    navigator.clipboard.writeText(txt).then(()=>{const t=document.getElementById('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);});
   };
 </script>
 </body>
