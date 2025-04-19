@@ -4,110 +4,91 @@
   <meta charset="utf-8" />
   <title>Discord ANSI‑block generator</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Tailwind CDN for quick styling -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>#editor span{font-style:italic}</style>
+  <style>
+    #editor span{font-style:italic}
+  </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
-  <h1 class="text-2xl font-bold mb-4">Discord ANSI Color‑Block Generator</h1>
+<body class="bg-gray-100 min-h-screen flex flex-col p-4">
+  <h1 class="text-2xl font-bold mb-4 text-center">Discord ANSI Color‑Block Generator</h1>
 
-  <div class="w-full max-w-3xl space-y-4">
-    <!-- Editable text area -->
-    <div>
-      <label class="font-semibold mb-1 block" for="editor">Editable text:</label>
-      <div id="editor" contenteditable="true" class="border border-gray-300 rounded-lg p-4 bg-white min-h-[200px] whitespace-pre-wrap"></div>
+  <div class="flex flex-1 w-full max-w-6xl mx-auto gap-4">
+    <!-- main editor -->
+    <div class="flex-1">
+      <div id="editor" contenteditable="true" class="border border-gray-300 rounded-lg p-4 bg-white min-h-[500px] whitespace-pre-wrap"></div>
     </div>
 
-    <!-- colour tools -->
-    <div class="flex flex-wrap items-start gap-4">
-      <input type="color" id="colorPicker" value="#22a034" class="w-10 h-10 p-0 border-0 cursor-pointer" title="Custom colour"/>
-      <button id="applyColor" class="bg-blue-600 text-white px-4 py-2 rounded-lg shadow">Apply colour</button>
+    <!-- side panel (fixed) -->
+    <aside class="w-56 shrink-0 flex flex-col gap-4 sticky top-4 self-start">
+      <!-- custom picker -->
+      <div class="flex items-center gap-2">
+        <input type="color" id="colorPicker" value="#22a034" class="w-10 h-10 p-0 border-0 cursor-pointer" title="Custom colour"/>
+        <button id="applyColor" class="bg-blue-600 text-white flex-1 py-2 rounded-lg shadow">Apply</button>
+      </div>
 
-      <!-- 5 × 5 preset palette -->
+      <!-- palette 5×5 -->
       <div id="palette" class="grid grid-cols-5 gap-1"></div>
-    </div>
 
-    <!-- actions -->
-    <div class="flex flex-wrap gap-2">
-      <button id="generate" class="bg-emerald-600 text-white px-4 py-2 rounded-lg shadow">Generate Discord text</button>
-      <button id="copy" class="bg-gray-700 text-white px-4 py-2 rounded-lg shadow">Copy to clipboard</button>
-    </div>
-
-    <!-- output -->
-    <div>
-      <label class="font-semibold mb-1 block" for="output">Output for Discord:</label>
-      <textarea id="output" readonly class="border border-gray-300 rounded-lg p-4 bg-white w-full h-48 whitespace-pre"></textarea>
-    </div>
+      <!-- copy button -->
+      <button id="copy" class="bg-emerald-600 text-white py-3 rounded-xl shadow">Скопировать текст для Discord</button>
+    </aside>
   </div>
-
-  <footer class="mt-4 text-sm text-gray-500">Pure client‑side. Host as‑is on GitHub Pages.</footer>
 
 <script>
   // ---------------------------------------------------------------------------
-  //  Palette (25 presets, 5 hues × 5 shades)
+  // Palette (25 colours, 5 hues × 5 shades)
   // ---------------------------------------------------------------------------
-  const presetColors=[
-    // yellows
+  const preset=[
     "#fff9c4","#fff176","#ffee58","#ffeb3b","#fdd835",
-    // greens
     "#c8e6c9","#a5d6a7","#81c784","#4caf50","#388e3c",
-    // reds
     "#ffcdd2","#ef9a9a","#e57373","#f44336","#d32f2f",
-    // blues
     "#bbdefb","#90caf9","#64b5f6","#2196f3","#1976d2",
-    // purples
     "#e1bee7","#ce93d8","#ba68c8","#9c27b0","#7b1fa2"
   ];
   const palette=document.getElementById("palette");
   const picker=document.getElementById("colorPicker");
-  presetColors.forEach(col=>{
-    const b=document.createElement("button");
-    b.className="w-8 h-8 rounded-lg border border-gray-300";
-    b.style.background=col;
-    b.title=col;
-    b.onclick=()=>{picker.value=col;applyColor(col);};
-    palette.appendChild(b);
-  });
 
-  // ---------------------------------------------------------------------------
-  const ESC="\u001b";
-  const editor=document.getElementById("editor");
-  const output=document.getElementById("output");
-
-  // Apply colour --------------------------------------------------------------
   function applyColor(col){
     document.execCommand("styleWithCSS",true,null);
     document.execCommand("foreColor",false,col);
   }
   document.getElementById("applyColor").onclick=()=>applyColor(picker.value);
 
-  // Helpers -------------------------------------------------------------------
+  preset.forEach(c=>{
+    const b=document.createElement("button");
+    b.className="w-8 h-8 rounded-lg border border-gray-300";
+    b.style.background=c;
+    b.title=c;
+    b.onclick=()=>{picker.value=c;applyColor(c);} ;
+    palette.appendChild(b);
+  });
+
+  // ---------------------------------------------------------------------------
+  const ESC="\u001b";
+  const editor=document.getElementById("editor");
+
   function rgbToAnsi(rgb){
     const m=rgb.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-    const [r,g,b]=m?m.slice(1).map(Number):[255,255,255];
+    if(!m) return "";
+    const [r,g,b]=m.slice(1).map(Number);
     return `${ESC}[38;2;${r};${g};${b}m`;
   }
 
-  // Conversion ----------------------------------------------------------------
-  function generateDiscordText(root){
+  function generate(root){
     let out="";
     let inside=false;
 
-    function open(){
-      if(!inside){ out+="```ansi\n"; inside=true; }
-    }
-    function close(){
-      if(inside){ out+="\n```"; inside=false; }
-    }
+    function open(){ if(!inside){ out+="```ansi\n"; inside=true;} }
+    function close(){ if(inside){ out+="\n```"; inside=false;} }
+
+    function isWhitespace(str){ return /^[\s\u00a0]*$/.test(str); }
 
     function walk(node){
       if(node.nodeType===Node.TEXT_NODE){
         const txt=node.textContent;
         out+=txt;
-        if(/\S/.test(txt) && !node.parentElement.style.color){
-          // narration – close if we were inside
-          close();
-        }
+        // Close only if this text contains visible chars *and* belongs to uncoloured parent
+        if(!isWhitespace(txt) && !node.parentElement.style.color){ close(); }
         return;
       }
       if(node.nodeType!==Node.ELEMENT_NODE) return;
@@ -118,8 +99,8 @@
         open();
         out+=rgbToAnsi(col);
         node.childNodes.forEach(walk);
-        out+=`${ESC}[0m`; // reset but stay inside block
-      } else {
+        out+=`${ESC}[0m`; // reset colour but keep block open
+      }else{
         node.childNodes.forEach(walk);
       }
     }
@@ -129,10 +110,16 @@
     return out.trim();
   }
 
-  // UI glue -------------------------------------------------------------------
-  document.getElementById("generate").onclick=()=>{output.value=generateDiscordText(editor);};
   document.getElementById("copy").onclick=()=>{
-    navigator.clipboard.writeText(output.value).then(()=>alert("Copied to clipboard"));
+    const txt=generate(editor);
+    navigator.clipboard.writeText(txt).then(()=>{
+      // quick toast
+      const toast=document.createElement("div");
+      toast.textContent="Скопировано!";
+      toast.className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg";
+      document.body.appendChild(toast);
+      setTimeout(()=>toast.remove(),1500);
+    });
   };
 </script>
 </body>
