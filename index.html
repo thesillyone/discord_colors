@@ -107,12 +107,13 @@
           const fmt = item.format;
           const ch = item.char;
           // On non-space char or change, emit codes
-          if ((ch.trim() !== '' && (
+          if (ch !== ' ' && ch !== '
+' && (
               fmt.bold !== prev.bold ||
               fmt.underline !== prev.underline ||
               fmt.fg !== prev.fg ||
               fmt.bg !== prev.bg
-            ))
+            )
           ) {
             const codes = [];
             if (fmt.bold) codes.push('1');
@@ -143,6 +144,7 @@
       }
     });
     return out;
+  }
   };
 </script>
 </body>
