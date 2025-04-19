@@ -89,79 +89,107 @@
   });
 
   function generateANSI(root) {
-    let out = '';
-    // Собираем абзацы по DIV и BR
-    const paras = [];
-    let cur = [];
-    root.childNodes.forEach(n => {
-      if (n.nodeType===1 && n.tagName==='DIV') {
-        // вложенные span/text
-        n.childNodes.forEach(c => cur.push(c));
+  console.log('--- generateANSI start ---');
+  const paras = [];
+  let cur = [];
+  Array.from(root.childNodes).forEach(n => {
+    console.log('Node:', n, 'type:', n.nodeType, 'tag:', n.tagName);
+    if (n.nodeType === 1 && n.tagName === 'DIV') {
+      // push previous if exists
+      if (cur.length) {
+        console.log('Push paragraph before DIV, count:', cur.length);
         paras.push(cur);
         cur = [];
-      } else if (n.nodeType===1 && n.tagName==='BR') {
-        paras.push(cur);
-        cur = [];
-      } else {
-        cur.push(n);
       }
-    });
-    if (cur.length) paras.push(cur);
-
-    paras.forEach(nodes => {
-      const chars = [];
-      const recurse = (node,fmt) => {
-        const f = {...fmt};
-        if (node.nodeType===1 && node.tagName==='SPAN') {
-          if (node.dataset.bold) f.bold=true;
-          if (node.dataset.underline) f.underline=true;
-          if (node.dataset.fg) f.fg=+node.dataset.fg;
-          if (node.dataset.bg) f.bg=+node.dataset.bg;
-        }
-        if (node.nodeType===3) {
-          node.textContent.split('').forEach(ch => chars.push({ch,fmt:{...f}}));
-        } else if (node.nodeType===1) {
-          if (node.tagName==='BR') chars.push({ch:'\n',fmt:{}});
-          else node.childNodes.forEach(c=>recurse(c,f));
-        }
-      };
-      nodes.forEach(n=>recurse(n,{}));
-
-      const hasColor = chars.some(c=>c.fmt.fg!=null||c.fmt.bg!=null);
-      if (hasColor) {
-        out += '```ansi\n';
-        let prev="";
-        chars.forEach(item=>{
-          const {ch,fmt} = item;
-          if (ch!=='\n') {
-            const codes = [];
-            if (fmt.bold) codes.push(1);
-            if (fmt.underline) codes.push(4);
-            if (fmt.fg!=null) codes.push(fmt.fg);
-            if (fmt.bg!=null) codes.push(fmt.bg);
-            else codes.push(49);
-            const codeStr = codes.join(';');
-            if (codeStr!==prev) {
-              out+=ESC+'['+codeStr+'m';
-              prev=codeStr;
-            }
-          }
-          out+=ch;
-        });
-        out+=ESC+'[0m\n```\n';
-      } else {
-        let line='';
-        chars.forEach(item=>{
-          if (item.fmt.bold && item.ch.trim()) line+='**'+item.ch+'**';
-          else line+=item.ch;
-        });
-        out+=line+'\n';
-      }
-    });
-    return out;
+      // this DIV is its own paragraph
+      const divChildren = Array.from(n.childNodes);
+      console.log('Push DIV paragraph, children count:', divChildren.length);
+      paras.push(divChildren);
+    } else if (n.nodeType === 1 && n.tagName === 'BR') {
+      console.log('Push paragraph at BR, count:', cur.length);
+      paras.push(cur);
+      cur = [];
+    } else {
+      cur.push(n);
+    }
+  });
+  if (cur.length) {
+    console.log('Push final paragraph, count:', cur.length);
+    paras.push(cur);
   }
 
-  document.getElementById('copy').addEventListener('click',e=>{
+  let out = '';
+  paras.forEach((nodes, pi) => {
+    console.log('Paragraph', pi, 'nodes count:', nodes.length);
+    const chars = [];
+    const recurse = (node, fmt) => {
+      const f = { ...fmt };
+      if (node.nodeType === 1 && node.tagName === 'SPAN') {
+        if (node.dataset.bold) f.bold = true;
+        if (node.dataset.underline) f.underline = true;
+        if (node.dataset.fg) f.fg = +node.dataset.fg;
+        if (node.dataset.bg) f.bg = +node.dataset.bg;
+      }
+      if (node.nodeType === 3) {
+        node.textContent.split('').forEach(ch => chars.push({ ch, fmt: { ...f } }));
+      } else if (node.nodeType === 1) {
+        if (node.tagName === 'BR') {
+          chars.push({ ch: '
+', fmt: {} });
+        } else {
+          Array.from(node.childNodes).forEach(c => recurse(c, f));
+        }
+      }
+    };
+    nodes.forEach(n => recurse(n, {}));
+
+    const hasColor = chars.some(c => c.fmt.fg != null || c.fmt.bg != null);
+    console.log('Paragraph', pi, 'hasColor:', hasColor, 'chars count:', chars.length);
+    if (hasColor) {
+      out += '```ansi
+';
+      let prevCodes = '';
+      chars.forEach((item, ci) => {
+        const { ch, fmt } = item;
+        if (ch !== '\n') {
+          const codes = [];
+          if (fmt.bold) codes.push(1);
+          if (fmt.underline) codes.push(4);
+          if (fmt.fg != null) codes.push(fmt.fg);
+          if (fmt.bg != null) codes.push(fmt.bg);
+          else codes.push(49);
+          const codeStr = codes.join(';');
+          if (codeStr !== prevCodes) {
+            out += ESC + '[' + codeStr + 'm';
+            prevCodes = codeStr;
+            console.log('Apply codes at char', ci, ':', codeStr);
+          }
+        } else {
+          console.log('Newline in chars at', ci);
+        }
+        out += ch;
+      });
+      out += ESC + '[0m
+```
+';
+    } else {
+      let line = '';
+      chars.forEach(item => {
+        if (item.fmt.bold && item.ch.trim()) {
+          line += '**' + item.ch + '**';
+        } else {
+          line += item.ch;
+        }
+      });
+      out += line + '
+';
+    }
+  });
+  console.log('--- generateANSI end ---');
+  return out;
+}
+
+document.getElementById('copy').addEventListener('click',e=>{.addEventListener('click',e=>{
     e.preventDefault();
     const txt=generateANSI(document.getElementById('editor'));
     navigator.clipboard.writeText(txt).then(()=>{
