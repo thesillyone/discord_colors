@@ -6,85 +6,98 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    #editor, #editor * { font-family: inherit; }
-    .toolbar button { font-size: 1rem; }
-    .toast { position: fixed; bottom: 1rem; left:50%; transform: translateX(-50%); background:rgba(0,0,0,0.8); color:#fff; padding:.5rem 1rem; border-radius:.5rem; opacity:0; transition:opacity .3s; }
-    .toast.show { opacity:1; }
+    body { font-family: sans-serif; background: #f3f4f6; }
+    #editor { width: 100%; max-width: 800px; min-height: 300px; margin: auto; padding: 1rem; background: #fff; border: 1px solid #ddd; border-radius: 0.5rem; white-space: pre-wrap; }
+    .toolbar { position: fixed; top: 1rem; right: 1rem; width: 200px; background: #fff; padding: 1rem; border: 1px solid #ddd; border-radius: 0.5rem; }
+    .toolbar button { width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; border: 1px solid #ccc; border-radius: 0.25rem; cursor: pointer; }
+    .toolbar .palette { display: grid; grid-template-columns: repeat(4,1fr); gap: 0.25rem; margin-bottom: 0.5rem; }
+    .palette button { width: 100%; height: 1.5rem; border: 1px solid #ccc; }
+    #toast { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 0.5rem 1rem; border-radius: 0.5rem; opacity: 0; transition: opacity 0.3s; }
+    #toast.show { opacity: 1; }
   </style>
 </head>
-<body class="bg-gray-100 p-4 min-h-screen">
-  <h1 class="text-2xl font-bold mb-4 text-center">Генератор ANSI‑блоков для Discord</h1>
-  <div class="max-w-4xl mx-auto">
-    <div id="editor" contenteditable class="border border-gray-300 rounded-lg p-4 bg-white min-h-[300px] whitespace-pre-wrap"></div>
+<body>
+  <h1 style="text-align:center;">Генератор ANSI‑блоков для Discord</h1>
+  <div id="editor" contenteditable="true"></div>
+  <div class="toolbar">
+    <button id="copy">Скопировать в Discord</button>
+    <button id="clear">Очистить форматирование</button>
+    <div style="margin-top:1rem; font-weight:bold;">Цвет текста</div>
+    <div id="fg-palette" class="palette"></div>
+    <div style="font-weight:bold;">Цвет фона</div>
+    <div id="bg-palette" class="palette"></div>
+    <div style="font-weight:bold; margin-top:0.5rem;">Стили</div>
+    <button id="bold">B</button>
+    <button id="underline">U</button>
   </div>
-  <div class="fixed top-20 right-4 w-60 bg-white p-4 rounded-lg shadow-lg toolbar">
-    <button id="copy" class="w-full bg-green-600 text-white py-2 rounded-lg mb-2">Скопировать в Discord</button>
-    <button id="clear-format" class="w-full bg-red-600 text-white py-2 rounded-lg mb-4">Очистить форматирование</button>
-    <div class="mb-2 font-semibold">Цвет текста</div>
-    <div id="fg-palette" class="grid grid-cols-4 gap-1 mb-4"></div>
-    <div class="mb-2 font-semibold">Цвет фона</div>
-    <div id="bg-palette" class="grid grid-cols-4 gap-1 mb-4"></div>
-    <div class="mb-2 font-semibold">Стили</div>
-    <div class="flex gap-2">
-      <button id="bold" title="Жирный" class="flex-1 border rounded-lg py-1">B</button>
-      <button id="underline" title="Подчёркнутый" class="flex-1 border rounded-lg py-1">U</button>
-    </div>
-  </div>
-  <div id="toast" class="toast">Скопировано!</div>
+  <div id="toast">Скопировано!</div>
 <script>
-  // Настройка execCommand
-  const editor = document.getElementById('editor');
-  const cmds = ['bold','underline'];
-  document.getElementById('bold').onclick = () => document.execCommand('bold');
-  document.getElementById('underline').onclick = () => document.execCommand('underline');
-  function makePalette(id, cmd) {
-    const colors = ['gray','red','green','yellow','blue','magenta','cyan','white'];
-    const cont = document.getElementById(id);
-    colors.forEach(c=>{
-      const btn = document.createElement('button'); btn.className='w-8 h-8 rounded-lg border'; btn.style.backgroundColor=c;
-      btn.onclick = ()=>{
-        document.execCommand('styleWithCSS', true, null);
-        document.execCommand(cmd, false, c);
-      };
-      cont.appendChild(btn);
-    });
-  }
-  makePalette('fg-palette','foreColor');
-  makePalette('bg-palette','hiliteColor');
+  const ESC = '\u001b';
+  const colors = ['gray','red','green','yellow','blue','magenta','cyan','white'];
+  const codes = [30,31,32,33,34,35,36,37];
 
-  // Генерация ANSI
-  const ESC='\u001b';
-  const ansiMap = {
-    'rgb(128, 128, 128)':30,'rgb(255, 0, 0)':31,'rgb(0, 128, 0)':32,'rgb(255, 255, 0)':33,
-    'rgb(0, 0, 255)':34,'rgb(255, 0, 255)':35,'rgb(0, 255, 255)':36,'rgb(255, 255, 255)':37
-  };
-  function generate(root) {
-    let out='';
-    function walk(node){
-      if(node.nodeType===3){ out+=node.textContent; return; }
+  function wrapWithSpan(type, value) {
+    const sel = window.getSelection(); if(!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const span = document.createElement('span');
+    span.dataset[type] = value;
+    if(type==='fg') span.style.color = colors[codes.indexOf(value)];
+    if(type==='bg') span.style.backgroundColor = colors[codes.indexOf(value)];
+    if(type==='bold') span.style.fontWeight = 'bold';
+    if(type==='underline') span.style.textDecoration = 'underline';
+    span.appendChild(range.extractContents());
+    range.insertNode(span);
+    sel.removeAllRanges();
+  }
+
+  // build palettes
+  const fg = document.getElementById('fg-palette');
+  const bg = document.getElementById('bg-palette');
+  codes.forEach((c,i)=>{
+    const b1 = document.createElement('button'); b1.style.background = colors[i];
+    b1.onclick = () => wrapWithSpan('fg', c);
+    fg.appendChild(b1);
+    const b2 = document.createElement('button'); b2.style.background = colors[i];
+    b2.onclick = () => wrapWithSpan('bg', c+10);
+    bg.appendChild(b2);
+  });
+  document.getElementById('bold').onclick = () => wrapWithSpan('bold',1);
+  document.getElementById('underline').onclick = () => wrapWithSpan('underline',4);
+  document.getElementById('clear').onclick = () => document.getElementById('editor').innerText = document.getElementById('editor').innerText;
+
+  function generateANSI(root) {
+    let out = '```ansi\n';
+    let prev = [];
+    function emitCodes(codes) {
+      out += ESC + '[' + codes.join(';') + 'm';
+    }
+    function walk(node) {
+      if(node.nodeType===3) { out+=node.textContent; return; }
       if(node.nodeType!==1) return;
-      if(node.tagName==='BR'){ out+='\n'; return; }
-      const style = window.getComputedStyle(node);
-      const codes=[];
-      if(style.fontWeight==='700' || style.fontWeight==='bold') codes.push('1');
-      if(style.textDecorationLine.includes('underline')) codes.push('4');
-      const fg = style.color;
-      if(ansiMap[fg]!=null) codes.push(ansiMap[fg]);
-      const bg = style.backgroundColor;
-      const bgCode = ansiMap[bg]!=null? ansiMap[bg]+10:null;
-      if(bgCode) codes.push(bgCode);
-      if(codes.length){ out+='```ansi\n'+ESC+'['+codes.join(';')+'m'; Array.from(node.childNodes).forEach(walk); out+=ESC+'[0m\n```'; }
-      else Array.from(node.childNodes).forEach(walk);
+      if(node.tagName==='BR') { out+='\n'; return; }
+      if(node.tagName==='SPAN') {
+        const cur = [];
+        if(node.dataset.bold) cur.push('1');
+        if(node.dataset.underline) cur.push('4');
+        if(node.dataset.fg) cur.push(node.dataset.fg);
+        if(node.dataset.bg) cur.push(node.dataset.bg);
+        if(JSON.stringify(cur)!==JSON.stringify(prev)) { emitCodes(cur); prev = cur; }
+        Array.from(node.childNodes).forEach(walk);
+        return;
+      }
+      Array.from(node.childNodes).forEach(walk);
     }
     walk(root);
+    out += ESC + '[0m\n```';
     return out;
   }
-  document.getElementById('copy').onclick=()=>{
-    const txt = generate(editor);
-    navigator.clipboard.writeText(txt).then(()=>{ const t=document.getElementById('toast'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500); });
-  };
-  document.getElementById('clear-format').onclick=()=>{
-    document.execCommand('removeFormat',false,null);
+
+  document.getElementById('copy').onclick = () => {
+    const text = generateANSI(document.getElementById('editor'));
+    navigator.clipboard.writeText(text).then(()=>{
+      const t = document.getElementById('toast'); t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'),1500);
+    });
   };
 </script>
 </body>
