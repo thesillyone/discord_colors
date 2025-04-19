@@ -136,8 +136,7 @@
       nodes.forEach(n => rec(n, {}));
       const hasColor = chars.some(i => i.fmt.fg != null || i.fmt.bg != null);
       if (hasColor) {
-        out += '```ansi
-';
+        out += '```ansi\n';
         let prevCodes = '';
         chars.forEach(item => {
           const f = item.fmt;
@@ -156,17 +155,14 @@
           }
           out += item.ch;
         });
-        out += ESC + '[0;0;0;0m
-```
-';
+        out += ESC + '[0;0;0;0m\n```\n';
       } else {
         let line = '';
         chars.forEach(item => {
           if (item.fmt.bold && item.ch.trim()) line += '**' + item.ch + '**';
           else line += item.ch;
         });
-        out += line + '
-';
+        out += line + '\n';
       }
     });
     return out;
