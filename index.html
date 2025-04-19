@@ -12,47 +12,48 @@
       color: #dcddde;
     }
     #editor {
-      width: 100%;
-      max-width: 800px;
-      min-height: 200px;
-      margin: 2rem auto;
-      padding: 1rem;
-      background: #2f3136;
-      color: #dcddde;
-      border: 1px solid #36393f;
-      border-radius: .5rem;
+      width:100%;
+      max-width:800px;
+      min-height:200px;
+      margin:2rem auto;
+      padding:1rem;
+      background:#2f3136;
+      color:#dcddde;
+      border:1px solid #36393f;
+      border-radius:.5rem;
       white-space: pre-wrap;
-      outline: none;
+      outline:none;
     }
     .toolbar {
-      position: fixed;
-      top: 1rem;
-      right: 1rem;
-      width: 260px;
-      background: #2f3136;
-      color: #dcddde;
-      padding: 1rem;
-      border: 1px solid #36393f;
-      border-radius: .5rem;
+      position:fixed;
+      top:1rem; right:1rem;
+      width:260px;
+      background:#2f3136;
+      color:#dcddde;
+      padding:1rem;
+      border:1px solid #36393f;
+      border-radius:.5rem;
     }
     .toolbar button {
-      width: 100%;
-      margin-bottom: .5rem;
-      padding: .5rem;
-      cursor: pointer;
-      background: #36393f;
-      color: #dcddde;
-      border: 1px solid #202225;
-      border-radius: .25rem;
+      width:100%;
+      margin-bottom:.5rem;
+      padding:.5rem;
+      cursor:pointer;
+      background:#36393f;
+      color:#dcddde;
+      border:1px solid #202225;
+      border-radius:.25rem;
     }
-    .toolbar .palette { display: grid; gap: .25rem; }
+    .toolbar .palette { display:grid; gap:.25rem; }
     #fg-palette { grid-template-columns: repeat(4,1fr); }
     #bg-palette { grid-template-columns: repeat(8,1fr); }
     .palette button {
-      width:100%; height:1.5rem; border:1px solid #36393f; padding:0;
+      width:100%; height:1.5rem;
+      border:1px solid #36393f;
+      padding:0;
     }
     #toast {
-      position: fixed; bottom:1rem; left:50%;
+      position:fixed; bottom:1rem; left:50%;
       transform:translateX(-50%);
       background:rgba(0,0,0,0.8); color:#fff;
       padding:.5rem 1rem; border-radius:.5rem;
@@ -105,65 +106,65 @@
       sel.removeAllRanges();
     }
 
-    // палитры кнопок
+    // рисуем палитры
     const fgCont = document.getElementById('fg-palette');
     const bgCont = document.getElementById('bg-palette');
     fgCodes.forEach((c,i)=>{
-      let btn = document.createElement('button');
+      const btn = document.createElement('button');
       btn.style.background = fgCss[i];
-      btn.addEventListener('click',e=>{ e.preventDefault(); wrap('fg',c); });
+      btn.addEventListener('click', e => { e.preventDefault(); wrap('fg', c); });
       fgCont.appendChild(btn);
     });
     bgCodes.forEach((c,i)=>{
-      let btn = document.createElement('button');
+      const btn = document.createElement('button');
       btn.style.background = bgCss[i];
-      btn.addEventListener('click',e=>{ e.preventDefault(); wrap('bg',c); });
+      btn.addEventListener('click', e => { e.preventDefault(); wrap('bg', c); });
       bgCont.appendChild(btn);
     });
 
-    // B/U
+    // B / U
     ['bold','underline'].forEach(type=>{
       const btn = document.getElementById(type);
-      btn.addEventListener('mousedown',e=>e.preventDefault());
-      btn.addEventListener('click',e=>{
+      btn.addEventListener('mousedown', e => e.preventDefault());
+      btn.addEventListener('click', e => {
         e.preventDefault();
         wrap(type, type==='bold'?1:4);
       });
     });
 
-    // очистка
+    // —— очистка по старому алгоритму ——
     const clearBtn = document.getElementById('clear');
-    clearBtn.addEventListener('mousedown',e=>e.preventDefault());
-    clearBtn.addEventListener('click',e=>{
+    clearBtn.addEventListener('mousedown', e => e.preventDefault());
+    clearBtn.addEventListener('click', e => {
       e.preventDefault();
       const sel = window.getSelection();
       if (!sel.rangeCount) return;
       const range = sel.getRangeAt(0);
-      const extracted = range.extractContents();
-      const cleanFrag = document.createDocumentFragment();
-      function cleanNode(n){
-        if (n.nodeType===1 && n.tagName==='SPAN') {
-          Array.from(n.childNodes).forEach(cleanNode);
+      const frag  = range.extractContents();
+      const clean = document.createDocumentFragment();
+      function cleanNode(node) {
+        if (node.nodeType===1 && node.tagName==='SPAN') {
+          Array.from(node.childNodes).forEach(cleanNode);
         } else {
-          cleanFrag.appendChild(n.cloneNode(true));
+          clean.appendChild(node.cloneNode(true));
         }
       }
-      Array.from(extracted.childNodes).forEach(cleanNode);
-      range.insertNode(cleanFrag);
+      Array.from(frag.childNodes).forEach(cleanNode);
+      range.insertNode(clean);
       document.getElementById('editor').normalize();
       sel.removeAllRanges();
     });
 
-    // НОВАЯ generateANSI
+    // —— генерация ANSI с правильными \n ——
     function generateANSI(root) {
       const chars = [];
       function rec(node, fmt) {
-        let f = Object.assign({}, fmt);
+        const f = Object.assign({}, fmt);
         if (node.nodeType===1 && node.tagName==='SPAN') {
-          f.bold      = node.dataset.bold      ? 1 : f.bold;
-          f.underline = node.dataset.underline ? 1 : f.underline;
-          f.fg        = node.dataset.fg        ? +node.dataset.fg : f.fg;
-          f.bg        = node.dataset.bg        ? +node.dataset.bg : f.bg;
+          if (node.dataset.bold)      f.bold      = 1;
+          if (node.dataset.underline) f.underline = 4;
+          if (node.dataset.fg)        f.fg        = +node.dataset.fg;
+          if (node.dataset.bg)        f.bg        = +node.dataset.bg;
         }
         if (node.nodeType===3) {
           node.textContent.split('').forEach(ch=>{
@@ -171,60 +172,61 @@
           });
         } else if (node.nodeType===1) {
           if (node.tagName==='BR') {
-            chars.push({ ch: NEW_LINE, fmt: Object.assign({},f) });
+            chars.push({ ch: NEW_LINE, fmt: Object.assign({}, f) });
           } else if (node.tagName==='DIV') {
-            Array.from(node.childNodes).forEach(c=>rec(c,f));
-            chars.push({ ch: NEW_LINE, fmt: Object.assign({},f) });
+            // обработать вложенное содержимое
+            Array.from(node.childNodes).forEach(c=>rec(c, f));
+            // и добавить перевод строки
+            chars.push({ ch: NEW_LINE, fmt: Object.assign({}, f) });
           } else {
-            Array.from(node.childNodes).forEach(c=>rec(c,f));
+            Array.from(node.childNodes).forEach(c=>rec(c, f));
           }
         }
       }
-      // стартовые нули
-      rec(root, {bold:0, underline:0, fg:0, bg:0});
+      // запускаем по всем дочерним узлам, чтобы DIV-ы давали \n
+      Array.from(root.childNodes).forEach(n=>rec(n, { bold:0, underline:0, fg:0, bg:0 }));
 
-      let out = '';
+      let out  = '';
       let prev = { bold:0, underline:0, fg:0, bg:0 };
-      let any = false;
+      let any  = false;
 
-      chars.forEach(item=>{
+      chars.forEach(item => {
         const f = item.fmt;
-        // есть ли стили вообще
         if (f.bold||f.underline||f.fg||f.bg) any = true;
-        // если хоть одно поле отличается — вставляем новую ANSI
         if (
-          f.bold      !== prev.bold ||
-          f.underline !== prev.underline ||
-          f.fg        !== prev.fg ||
+          f.bold      !== prev.bold    ||
+          f.underline !== prev.underline||
+          f.fg        !== prev.fg      ||
           f.bg        !== prev.bg
         ) {
           const codes = [];
           if (f.bold)      codes.push(1);
           if (f.underline) codes.push(4);
-          if (f.fg)        codes.push(f.fg);
-          if (f.bg)        codes.push(f.bg);
+          codes.push(f.fg   || 0);
+          // фон 0 → 49
+          codes.push(f.bg? f.bg: 49);
           out += ESC + '[' + codes.join(';') + 'm';
           prev = Object.assign({}, f);
         }
         out += item.ch;
       });
 
-      // сброс
+      // сброс в конце
       out += ESC + '[0m';
 
       if (any) {
         return '```ansi' + NEW_LINE
-             + out + NEW_LINE
+             + out   + NEW_LINE
              + '```';
       } else {
         return out;
       }
     }
 
-    // копировать
+    // копирование
     const btnCopy = document.getElementById('copy');
-    btnCopy.addEventListener('mousedown',e=>e.preventDefault());
-    btnCopy.addEventListener('click',e=>{
+    btnCopy.addEventListener('mousedown', e=>e.preventDefault());
+    btnCopy.addEventListener('click', e=>{
       e.preventDefault();
       const txt = generateANSI(document.getElementById('editor'));
       navigator.clipboard.writeText(txt).then(()=>{
