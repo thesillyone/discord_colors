@@ -169,9 +169,7 @@
         }
         out += ch;
       });
-      out += ESC + '[0m
-```
-';
+      out += ESC + '[0m\n```\n';
     } else {
       let line = '';
       chars.forEach(item => {
@@ -181,8 +179,7 @@
           line += item.ch;
         }
       });
-      out += line + '
-';
+      out += line + '\n';
     }
   });
   console.log('--- generateANSI end ---');
