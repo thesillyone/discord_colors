@@ -223,33 +223,114 @@
     }));
 
     function generateANSI(root) {
-      let out = '', prev = {}, any = false;
-      function code(fmt) {
-        const parts = [];
-        if (fmt.bold) parts.push(1);
-        if (fmt.underline) parts.push(4);
-        if (fmt.fg) parts.push(fmt.fg);
-        if (fmt.bg) parts.push(fmt.bg);
-        return parts.length ? ESC + '[' + parts.join(';') + 'm' : '';
-      }
-      for (const node of root.querySelectorAll('span')) {
-        const fmt = {
-          bold: node.dataset.bold ? 1 : 0,
-          underline: node.dataset.underline ? 4 : 0,
-          fg: +node.dataset.fg || 0,
-          bg: +node.dataset.bg || 0
-        };
-        const diff = JSON.stringify(fmt) !== JSON.stringify(prev);
-        if (diff) {
-          out += ESC + '[0m' + code(fmt);
-          prev = fmt;
-        }
-        out += node.textContent;
-        any = any || Object.values(fmt).some(v => v);
-      }
-      if (any) out += ESC + '[0m';
-      return '```ansi\n' + out + '\n```';
+  const ESC = '\u001b';
+  const paragraphs = [];
+  let current = [];
+
+  function flushParagraph() {
+    if (current.length) {
+      paragraphs.push(current);
+      current = [];
     }
+  }
+
+  function walk(node, fmt) {
+    if (node.nodeType === 3) {
+      node.textContent.split('').forEach(ch => {
+        current.push({ ch, fmt: { ...fmt } });
+      });
+    } else if (node.nodeType === 1) {
+      if (node.tagName === 'BR') {
+        flushParagraph();
+      } else if (node.tagName === 'SPAN') {
+        const newFmt = { ...fmt };
+        if (node.dataset.bold) newFmt.bold = 1;
+        if (node.dataset.underline) newFmt.underline = 4;
+        if (node.dataset.fg) newFmt.fg = +node.dataset.fg;
+        if (node.dataset.bg) newFmt.bg = +node.dataset.bg;
+        node.childNodes.forEach(child => walk(child, newFmt));
+      } else {
+        node.childNodes.forEach(child => walk(child, fmt));
+      }
+    }
+  }
+
+  root.childNodes.forEach(n => walk(n, { bold: 0, underline: 0, fg: 0, bg: 0 }));
+  flushParagraph();
+
+  let result = '';
+  let prevFmt = { bold: 0, underline: 0, fg: 0, bg: 0 };
+  let inAnsiBlock = false;
+
+  function fmtDiff(a, b) {
+    return JSON.stringify(a) !== JSON.stringify(b);
+  }
+
+  function fmtToAnsi(fmt) {
+    const codes = [];
+    if (fmt.bold) codes.push(1);
+    if (fmt.underline) codes.push(4);
+    if (fmt.fg) codes.push(fmt.fg);
+    if (fmt.bg) codes.push(fmt.bg);
+    return codes.length ? ESC + '[' + codes.join(';') + 'm' : '';
+  }
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const para = paragraphs[i];
+    let hasFormatting = para.some(p => p.fmt.bold || p.fmt.underline || p.fmt.fg || p.fmt.bg);
+
+    if (hasFormatting) {
+      if (!inAnsiBlock) {
+        result += '```ansi\n';
+        inAnsiBlock = true;
+      }
+      prevFmt = { bold: 0, underline: 0, fg: 0, bg: 0 };
+      for (const { ch, fmt } of para) {
+        if (fmtDiff(fmt, prevFmt)) {
+          result += ESC + '[0m';
+          result += fmtToAnsi(fmt);
+          prevFmt = { ...fmt };
+        }
+        result += ch;
+      }
+      result += '\n';
+    } else {
+      if (inAnsiBlock) {
+        result += ESC + '[0m\n```';
+        inAnsiBlock = false;
+      }
+      result += para.map(p => p.ch).join('') + '\n';
+    }
+  }
+
+  if (inAnsiBlock) {
+    result += ESC + '[0m\n```';
+  }
+
+  return result.trimEnd();
+}
+
+// исправим ввод перевода строки в редакторе
+editor.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const br = document.createElement('br');
+    const span = document.createElement('span');
+    span.appendChild(br);
+    const space = document.createTextNode('\u200B');
+    range.deleteContents();
+    range.insertNode(space);
+    range.insertNode(span);
+    range.setStartAfter(space);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    updateToolbarState();
+  }
+});
+
 
     document.getElementById('copy').onclick = () => {
       const ansi = generateANSI(document.getElementById('editor'));
