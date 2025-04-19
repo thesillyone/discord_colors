@@ -38,10 +38,11 @@
       width: 100%;
       margin-bottom: .5rem;
       padding: .5rem;
-      border: 1px solid #ccc;
-      border-radius: .25rem;
       cursor: pointer;
-      background: #fafafa;
+      background: #36393f;
+      color: #dcddde;
+      border: 1px solid #202225;
+      border-radius: .25rem;
     }
     .toolbar .palette {
       display: grid;
@@ -55,7 +56,7 @@
     .palette button {
       width: 100%;
       height: 1.5rem;
-      border: 1px solid #ccc;
+      border: 1px solid #36393f;
       padding: 0;
     }
     #bold { font-weight: bold; }
@@ -98,13 +99,13 @@
     const ESC       = '\u001b';
     const NEW_LINE  = '\n';
 
-    // Палитры: Solarized Dark + точные фоновые из дискорда
+    // Палитры: Solarized Dark + точные фоновые из Discord
     const fgCss   = ['#586e75','#dc322f','#859900','#b58900','#268bd2','#d33682','#2aa198','#eee8d5'];
     const bgCss   = ['#002b36','#cb4b16','#586e75','#657b83','#839496','#6c71c4','#93a1a1','#fdf6e3'];
     const fgCodes = [30,31,32,33,34,35,36,37];
     const bgCodes = fgCodes.map(c=>c+10);
 
-    // ——— Обёртываем выделение в <span> ———
+    // ——— Wrap selection in <span> ———
     function wrap(type, value) {
       const sel = window.getSelection();
       if (!sel.rangeCount) return;
@@ -121,7 +122,7 @@
       console.log('wrap:', type, value);
     }
 
-    // ——— Рисуем палитры ———
+    // ——— Draw palettes ———
     const fgCont = document.getElementById('fg-palette');
     const bgCont = document.getElementById('bg-palette');
     fgCodes.forEach((c,i)=>{
@@ -143,38 +144,36 @@
       bgCont.appendChild(btn);
     });
 
-    // ——— Стили Bold/Underline ———
+    // ——— Bold/Underline ———
     const btnBold      = document.getElementById('bold');
     const btnUnderline = document.getElementById('underline');
     [btnBold, btnUnderline].forEach(btn=>{
-      btn.addEventListener('mousedown', e=>{
-        e.preventDefault();
-      });
+      btn.addEventListener('mousedown', e=> e.preventDefault());
     });
     btnBold.addEventListener('click',      e=>{ e.preventDefault(); wrap('bold', 1); });
     btnUnderline.addEventListener('click', e=>{ e.preventDefault(); wrap('underline', 4); });
 
-    // ——— Очистка форматирования ———
+    // ——— Clear formatting ———
     const clearBtn = document.getElementById('clear');
     clearBtn.addEventListener('mousedown', e=>{
       e.preventDefault();
-      console.log('clear: mousedown — выделение сохранено');
+      console.log('clear: mousedown — selection kept');
     });
     clearBtn.addEventListener('click', e=>{
       e.preventDefault();
-      console.log('clear: click — начинаем очистку');
+      console.log('clear: click — start clearing');
       const sel = window.getSelection();
       if (!sel.rangeCount) {
-        console.warn('clear: нет выделения');
+        console.warn('clear: no selection');
         return;
       }
       const range = sel.getRangeAt(0);
-      console.log('clear: диапазон', range);
+      console.log('clear: range', range);
       const frag = range.extractContents();
       const cleanFrag = document.createDocumentFragment();
       function clean(node) {
         if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'SPAN') {
-          console.log('clear: разворачиваем span', node.dataset);
+          console.log('clear: unwrap span', node.dataset);
           Array.from(node.childNodes).forEach(clean);
         } else {
           cleanFrag.appendChild(node.cloneNode(true));
@@ -182,71 +181,82 @@
       }
       Array.from(frag.childNodes).forEach(clean);
       range.insertNode(cleanFrag);
-      document.getElementById('editor').normalize();
+
+      // Normalize and remove any empty spans left behind
+      const editor = document.getElementById('editor');
+      editor.normalize();
+      editor.querySelectorAll('span').forEach(span=>{
+        if (!span.hasChildNodes()) {
+          console.log('clear: removing empty span');
+          span.remove();
+        }
+      });
+
       sel.removeAllRanges();
-      console.log('clear: форматирование снято');
+      console.log('clear: done');
     });
 
-    // ——— Генерация ANSI ———
+    // ——— Generate ANSI ———
     function generateANSI(root) {
       console.log('generateANSI: start');
-      // Разбиваем на параграфы по <div> и <br>
+      // split into paragraphs by DIV and BR
       const paras = [];
       let cur = [];
       root.childNodes.forEach(n => {
-        if (n.nodeType===1 && (n.tagName==='BR' || n.tagName==='DIV')) {
+        if (n.nodeType === 1 && (n.tagName === 'BR' || n.tagName === 'DIV')) {
           paras.push(cur);
           cur = [];
-          if (n.tagName==='DIV' && n.childNodes.length) {
-            Array.from(n.childNodes).forEach(c=>cur.push(c));
+          if (n.tagName === 'DIV' && n.childNodes.length) {
+            Array.from(n.childNodes).forEach(c => cur.push(c));
           }
         } else {
           cur.push(n);
         }
       });
       if (cur.length) paras.push(cur);
-      console.log('generateANSI: paras count =', paras.length);
+      console.log('generateANSI: paragraphs =', paras.length);
 
       const ESCsq = ESC;
-      const paraLines = paras.map((nodes, idx)=>{
-        console.log('generateANSI: building para', idx, nodes);
+      const paraLines = paras.map((nodes, idx) => {
+        console.log('generateANSI: build para', idx);
         const chars = [];
         function rec(node, fmt) {
           const f = {...fmt};
-          if (node.nodeType===1 && node.tagName==='SPAN') {
+          if (node.nodeType === 1 && node.tagName === 'SPAN') {
             if (node.dataset.bold)      f.bold      = true;
             if (node.dataset.underline) f.underline = true;
             if (node.dataset.fg)        f.fg        = +node.dataset.fg;
             if (node.dataset.bg)        f.bg        = +node.dataset.bg;
           }
-          if (node.nodeType===3) {
-            node.textContent.split('').forEach(ch=>chars.push({ch, fmt:{...f}}));
-          } else if (node.nodeType===1) {
-            if (node.tagName==='BR') {
+          if (node.nodeType === 3) {
+            node.textContent.split('').forEach(ch => chars.push({ch, fmt:{...f}}));
+          } else if (node.nodeType === 1) {
+            if (node.tagName === 'BR') {
               chars.push({ch: NEW_LINE, fmt:{}});
             } else {
-              node.childNodes.forEach(c=>rec(c, f));
+              node.childNodes.forEach(c => rec(c, f));
             }
           }
         }
-        nodes.forEach(n=>rec(n, {}));
+        nodes.forEach(n => rec(n, {}));
+
         let line = '';
         let prev = {bold:false, underline:false, fg:null, bg:null};
-        chars.forEach(item=>{
+        chars.forEach(item => {
           const f = item.fmt;
-          if (item.ch!== ' ' && item.ch!== NEW_LINE &&
-              (f.bold!==prev.bold ||
-               f.underline!==prev.underline ||
-               f.fg!==prev.fg ||
-               f.bg!==prev.bg)) {
+          if (item.ch !== ' ' && item.ch !== NEW_LINE &&
+              (f.bold      !== prev.bold ||
+               f.underline !== prev.underline ||
+               f.fg        !== prev.fg ||
+               f.bg        !== prev.bg)) {
             const codes = [];
             if (f.bold)      codes.push(1);
             if (f.underline) codes.push(4);
             codes.push(f.fg != null ? f.fg : 39);
             codes.push(f.bg != null ? f.bg : 49);
-            const codeStr = ESCsq + '[' + codes.join(';') + 'm';
-            console.log('generateANSI: insert code', codeStr, 'at', item.ch);
-            line += codeStr;
+            const cs = ESCsq + '[' + codes.join(';') + 'm';
+            console.log('generateANSI: code', cs);
+            line += cs;
             prev = {bold:!!f.bold, underline:!!f.underline, fg:f.fg, bg:f.bg};
           }
           line += item.ch;
@@ -254,24 +264,22 @@
         return line;
       });
 
-      const anyColor = paraLines.some(l=>l.includes(ESCsq + '['));
+      const anyColor = paraLines.some(l => l.includes(ESCsq + '['));
       let out = '';
       if (anyColor) {
         out += '```ansi' + NEW_LINE;
-        paraLines.forEach(l=>{ out += l + NEW_LINE; });
+        paraLines.forEach(l => out += l + NEW_LINE);
         out += ESCsq + '[0m' + NEW_LINE + '```' + NEW_LINE;
       } else {
-        paraLines.forEach(l=>{ out += l + NEW_LINE; });
+        paraLines.forEach(l => out += l + NEW_LINE);
       }
-      console.log('generateANSI: done, length =', out.length);
+      console.log('generateANSI: done, length', out.length);
       return out;
     }
 
-    // ——— Копирование в буфер ———
+    // ——— Copy to clipboard ———
     const btnCopy = document.getElementById('copy');
-    btnCopy.addEventListener('mousedown', e=>{
-      e.preventDefault();
-    });
+    btnCopy.addEventListener('mousedown', e=> e.preventDefault());
     btnCopy.addEventListener('click', e=>{
       e.preventDefault();
       console.log('Copy to clipboard');
