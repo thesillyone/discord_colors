@@ -14,7 +14,7 @@
       <div id="editor"
            contenteditable="true"
            class="w-full h-[80vh] bg-gray-800 p-4 rounded border border-gray-700 whitespace-pre-wrap overflow-auto">
-        <!-- Начните писать здесь… -->
+        <!-- пусто -->
       </div>
     </div>
 
@@ -79,94 +79,65 @@
   <script>
     console.log('⚙️ Скрипт загружен');
 
-    // Оборачивает выделение в <span>, даёт его колбэку, затем вставляет обратно
+    // Убираем автогенерацию пустых абзацев
+    document.addEventListener('DOMContentLoaded', () => {
+      const editor = document.getElementById('editor');
+      editor.innerHTML = '';
+      console.log('editor очищён от пустышек');
+    });
+
+    // Оборачивает выделение в <span> и выполняет fn(span)
     function applyToSelection(fn, name) {
       const sel = window.getSelection();
-      console.log(`applyToSelection (${name})`, sel.rangeCount, sel.toString());
-      if (!sel.rangeCount) return;
+      console.log(`applyToSelection (${name})`, 'count=', sel.rangeCount, 'text=', sel.toString(), 'collapsed=', sel.isCollapsed);
+      if (!sel.rangeCount || sel.isCollapsed) {
+        console.log(`  → пропускаем, нет выделения`);
+        return;
+      }
       const range = sel.getRangeAt(0);
-      console.log('  range startContainer:', range.startContainer, 'endContainer:', range.endContainer);
       const fragment = range.extractContents();
-      const wrapper = document.createElement('span');
-      wrapper.dataset.bold = wrapper.dataset.bold || '';
-      wrapper.dataset.underline = wrapper.dataset.underline || '';
-      wrapper.dataset.fg = wrapper.dataset.fg || '';
-      wrapper.dataset.bg = wrapper.dataset.bg || '';
-      wrapper.appendChild(fragment);
-      console.log('  before fn, wrapper.dataset:', wrapper.dataset);
-      fn(wrapper);
-      console.log('  after fn, wrapper.dataset:', wrapper.dataset);
-      range.insertNode(wrapper);
-      console.log('  applied to selection');
+      const span = document.createElement('span');
+      span.dataset.bold = span.dataset.bold || '';
+      span.dataset.underline = span.dataset.underline || '';
+      span.dataset.fg = span.dataset.fg || '';
+      span.dataset.bg = span.dataset.bg || '';
+      span.appendChild(fragment);
+      console.log('  before fn dataset:', span.dataset);
+      fn(span);
+      console.log('  after fn dataset:', span.dataset);
+      range.insertNode(span);
+      console.log('  → формат применён');
     }
 
-    // Очищает только выделенный участок от <span>…</span>
+    // Очищает форматирование только в выделенном фрагменте
     function clearFormatting() {
       const sel = window.getSelection();
-      console.log('clearFormatting', sel.rangeCount, sel.toString());
-      if (!sel.rangeCount) return;
+      console.log('clearFormatting', 'count=', sel.rangeCount, 'text=', sel.toString());
+      if (!sel.rangeCount || sel.isCollapsed) {
+        console.log('  → пропускаем, нет выделения');
+        return;
+      }
       const range = sel.getRangeAt(0);
-      const fragment = range.extractContents();
+      const frag = range.extractContents();
 
       function unwrap(node) {
         if (node.nodeType === 1 && node.tagName === 'SPAN') {
-          const frag = document.createDocumentFragment();
-          node.childNodes.forEach(c => frag.appendChild(unwrap(c)));
-          return frag;
-        }
-        if (node.childNodes) {
-          const copy = node.cloneNode(false);
-          node.childNodes.forEach(c => copy.appendChild(unwrap(c)));
-          return copy;
+          const df = document.createDocumentFragment();
+          node.childNodes.forEach(c => df.appendChild(unwrap(c)));
+          return df;
+        } else if (node.childNodes) {
+          const cpy = node.cloneNode(false);
+          node.childNodes.forEach(c => cpy.appendChild(unwrap(c)));
+          return cpy;
         }
         return node.cloneNode();
       }
 
       const clean = document.createDocumentFragment();
-      fragment.childNodes.forEach(c => clean.appendChild(unwrap(c)));
+      frag.childNodes.forEach(c => clean.appendChild(unwrap(c)));
       range.insertNode(clean);
-      console.log('  formatting cleared on selection');
+      console.log('  → форматирование убрано');
     }
-
-    // Привязка кнопок
-    document.getElementById('clear').onclick = () => {
-      console.log('click clear');
-      clearFormatting();
-    };
-
-    document.getElementById('fg-palette').onclick = e => {
-      const btn = e.target.closest('button[data-fg]');
-      console.log('click fg-palette', btn?.dataset.fg);
-      if (!btn) return;
-      const code = btn.dataset.fg;
-      applyToSelection(span => {
-        span.dataset.fg = code;
-      }, 'fg');
-    };
-
-    document.getElementById('bg-palette').onclick = e => {
-      const btn = e.target.closest('button[data-bg]');
-      console.log('click bg-palette', btn?.dataset.bg);
-      if (!btn) return;
-      const code = btn.dataset.bg;
-      applyToSelection(span => {
-        span.dataset.bg = code;
-      }, 'bg');
-    };
-
-    document.getElementById('bold').onclick = () => {
-      console.log('click bold');
-      applyToSelection(span => {
-        span.dataset.bold = span.dataset.bold === 'true' ? '' : 'true';
-      }, 'bold');
-    };
-
-    document.getElementById('underline').onclick = () => {
-      console.log('click underline');
-      applyToSelection(span => {
-        span.dataset.underline = span.dataset.underline === 'true' ? '' : 'true';
-      }, 'underline');
-    };
 
     // Toast
     function showToast() {
@@ -176,95 +147,45 @@
       setTimeout(() => t.classList.remove('opacity-100'), 1200);
     }
 
-    // Сборка ANSI‑текста
+    // ANSI‑генератор
     function generateANSI() {
-      console.log('generateANSI start');
+      console.log('generateANSI');
       const editor = document.getElementById('editor');
       let out = '';
 
-      // Получаем абзацы
+      // Собираем «абзацы»
       const paras = [];
       editor.childNodes.forEach(n => {
-        if ((n.nodeType === 1 && (n.tagName === 'DIV' || n.tagName === 'P')) ||
-            (n.nodeType === 3 && n.textContent.trim() !== '')) {
-          paras.push(n);
-        }
+        // берём только непустые или стилизованные узлы
+        if (
+          (n.nodeType === 1 && (n.tagName==='DIV' || n.tagName==='P') && n.textContent.trim()!=='') ||
+          (n.nodeType === 3 && n.textContent.trim()!=='')
+        ) paras.push(n);
       });
-      console.log('  paragraphs count:', paras.length);
+      console.log('  параграфов найдено:', paras.length);
 
       paras.forEach((p, pi) => {
-        console.log(`  paragraph[${pi}]:`, p);
+        console.log(`  параграф[${pi}] текст:`, p.textContent);
+        // собираем символы + формат
         const items = [];
-        function traverse(node, fmt) {
+        function trav(node, fmt) {
           if (node.nodeType === 3) {
             for (let ch of node.textContent) {
               items.push({ char: ch, fmt: { ...fmt } });
             }
-          } else if (node.nodeType === 1 && node.tagName === 'SPAN') {
+          } else if (node.nodeType === 1 && node.tagName==='SPAN') {
             const f2 = { ...fmt };
-            if (node.dataset.bold === 'true') f2.bold = true;
-            if (node.dataset.underline === 'true') f2.underline = true;
-            if (node.dataset.fg) f2.fg = node.dataset.fg;
-            if (node.dataset.bg) f2.bg = node.dataset.bg;
-            node.childNodes.forEach(c => traverse(c, f2));
+            if (node.dataset.bold==='true')      f2.bold = true;
+            if (node.dataset.underline==='true') f2.underline = true;
+            if (node.dataset.fg)                f2.fg = node.dataset.fg;
+            if (node.dataset.bg)                f2.bg = node.dataset.bg;
+            node.childNodes.forEach(c=>trav(c,f2));
           } else {
-            node.childNodes.forEach(c => traverse(c, fmt));
+            node.childNodes.forEach(c=>trav(c,fmt));
           }
         }
-        traverse(p, { bold: false, underline: false, fg: '0', bg: '0' });
-        console.log(`    items count: ${items.length}`, items);
+        trav(p, { bold:false, underline:false, fg:'0', bg:'0' });
+        console.log(`    символов:`, items.length);
 
-        const hasColor = items.some(it => it.fmt.fg !== '0' || it.fmt.bg !== '0');
-        console.log(`    hasColor: ${hasColor}`);
-        if (!hasColor) {
-          const raw = p.textContent;
-          const needBold = items.some(it => it.fmt.bold);
-          out += needBold ? `**${raw}**\n` : `${raw}\n`;
-          console.log(`    plain paragraph:`, raw);
-        } else {
-          out += '```ansi\n';
-          let prev = { bold: false, underline: false, fg: '0', bg: '0' };
-          for (let it of items) {
-            if (it.char === '\n') continue;
-            const f = it.fmt;
-            const changed =
-              f.bold      !== prev.bold  ||
-              f.underline !== prev.underline ||
-              f.fg        !== prev.fg    ||
-              f.bg        !== prev.bg;
-
-            if (changed && it.char !== ' ') {
-              const codes = [
-                f.bold ? 1 : 0,
-                f.underline ? 4 : 0,
-                Number(f.fg),
-                Number(f.bg)
-              ];
-              out += `\u001b[${codes.join(';')}m`;
-              prev = { ...f };
-              console.log('      emit code:', codes, 'for char', it.char);
-            }
-            out += it.char;
-          }
-          out += '\u001b[0;0;0;0m\n```\n';
-        }
-      });
-
-      console.log('generateANSI result:\n', out);
-      return out;
-    }
-
-    // Копировать
-    document.getElementById('copy').onclick = () => {
-      console.log('click copy');
-      const txt = generateANSI();
-      navigator.clipboard.writeText(txt).then(
-        () => { console.log('clipboard write success'); showToast(); },
-        err => console.error('clipboard write failed', err)
-      );
-    };
-
-    console.log('⚙️ Скрипт инициализирован');
-  </script>
-</body>
-</html>
+        // решаем, ANSI или Markdown
+        const hasColor = items.some(it=>it.fmt.fg!=='0'||it.fmt.bg!
