@@ -41,9 +41,11 @@
     {code: '0;44', css: 'gray'}, {code: '0;45', css: 'indigo'}, {code: '0;46', css: 'lightgray'}, {code: '0;47', css: 'white'}
   ];
   const palette = document.getElementById('palette');
+  // Создание кнопок палитры
   paletteData.forEach(item => {
     const btn = document.createElement('button');
-    btn.className = 'w-8 h-8 rounded-lg border';
+    btn.className = 'w-8 h-8 rounded-lg border border-gray-300';
+    // Показываем цвет в фоне кнопки всегда для наглядности
     btn.style.backgroundColor = item.css;
     btn.title = '[' + item.code + 'm';
     btn.dataset.ansi = ESC + '[' + item.code + 'm';
