@@ -34,28 +34,37 @@
   </div>
   <div id="toast">Скопировано!</div>
 <script>
-  const ESC='\u001b';
-  const colors=['gray','red','green','yellow','blue','magenta','cyan','white'];
-  const fgCodes=[30,31,32,33,34,35,36,37];
-  const bgCodes=fgCodes.map(c=>c+10);
-  function wrap(type,value){
-    const sel=window.getSelection(); if(!sel.rangeCount) return;
-    const range=sel.getRangeAt(0);
-    const span=document.createElement('span');
-    if(type==='fg'){ span.dataset.fg=value; span.style.color=colors[fgCodes.indexOf(value)]; }
-    if(type==='bg'){ span.dataset.bg=value; span.style.backgroundColor=colors[fgCodes.indexOf(value-10)]; }
-    if(type==='bold'){ span.dataset.bold=1; span.style.fontWeight='bold'; }
-    if(type==='underline'){ span.dataset.underline=4; span.style.textDecoration='underline'; }
+  const ESC = '\u001b';
+  const colors = ['gray','red','green','yellow','blue','magenta','cyan','white'];
+  const fgCodes = [30,31,32,33,34,35,36,37];
+  const bgCodes = fgCodes.map(c => c + 10);
+
+  function wrap(type, value) {
+    const sel = window.getSelection(); if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const span = document.createElement('span');
+    if (type === 'fg') { span.dataset.fg = value; span.style.color = colors[fgCodes.indexOf(value)]; }
+    if (type === 'bg') { span.dataset.bg = value; span.style.backgroundColor = colors[bgCodes.indexOf(value)]; }
+    if (type === 'bold') { span.dataset.bold = '1'; span.style.fontWeight = 'bold'; }
+    if (type === 'underline') { span.dataset.underline = '4'; span.style.textDecoration = 'underline'; }
     span.appendChild(range.extractContents());
     range.insertNode(span);
     sel.removeAllRanges();
   }
-  const fg=document.getElementById('fg-palette'), bg=document.getElementById('bg-palette');
-  fgCodes.forEach((c,i)=>{ const b=document.createElement('button'); b.style.background=colors[i]; b.onclick=()=>wrap('fg',c); fg.appendChild(b); });
-  bgCodes.forEach((c,i)=>{ const b=document.createElement('button'); b.style.background=colors[i]; b.onclick=()=>wrap('bg',c); bg.appendChild(b); });
-  document.getElementById('bold').onclick=()=>wrap('bold');
-  document.getElementById('underline').onclick=()=>wrap('underline');
-  document.getElementById('clear').onclick=()=>{ const ed=document.getElementById('editor'); ed.innerText=ed.innerText; };
+
+  // Build palettes
+  const fgContainer = document.getElementById('fg-palette');
+  const bgContainer = document.getElementById('bg-palette');
+  fgCodes.forEach((code, i) => {
+    const btn = document.createElement('button'); btn.style.background = colors[i]; btn.onclick = () => wrap('fg', code); fgContainer.appendChild(btn);
+  });
+  bgCodes.forEach((code, i) => {
+    const btn = document.createElement('button'); btn.style.background = colors[i]; btn.onclick = () => wrap('bg', code); bgContainer.appendChild(btn);
+  });
+  document.getElementById('bold').onclick = () => wrap('bold');
+  document.getElementById('underline').onclick = () => wrap('underline');
+  document.getElementById('clear').onclick = () => { const ed = document.getElementById('editor'); ed.innerText = ed.innerText; };
+
   function generateANSI(root) {
     let out = '';
     const paragraphs = [];
@@ -73,7 +82,7 @@
     paragraphs.forEach(nodes => {
       const items = [];
       function recurse(node, format) {
-        let newFormat = Object.assign({}, format);
+        const newFormat = Object.assign({}, format);
         if (node.nodeType === 1 && node.tagName === 'SPAN') {
           if (node.dataset.bold) newFormat.bold = true;
           if (node.dataset.underline) newFormat.underline = true;
@@ -86,24 +95,22 @@
           }
         } else if (node.nodeType === 1) {
           if (node.tagName === 'BR') {
-            items.push({ char: '
-', format: {} });
+            items.push({ char: '\n', format: {} });
           } else {
             Array.from(node.childNodes).forEach(child => recurse(child, newFormat));
           }
         }
       }
       nodes.forEach(n => recurse(n, {}));
-      const hasColor = items.some(i => i.format.fg || i.format.bg);
+
+      const hasColor = items.some(i => i.format.fg != null || i.format.bg != null);
       if (hasColor) {
-        out += '```ansi
-';
+        out += '```ansi\n';
         let prev = { bold: false, underline: false, fg: null, bg: null };
         items.forEach(item => {
           const fmt = item.format;
           const ch = item.char;
-          if (ch !== ' ' && ch !== '
-' && (
+          if (ch !== ' ' && ch !== '\n' && (
               fmt.bold !== prev.bold ||
               fmt.underline !== prev.underline ||
               fmt.fg !== prev.fg ||
@@ -119,9 +126,7 @@
           }
           out += ch;
         });
-        out += ESC + '[0m
-```
-';
+        out += ESC + '[0m\n```\n';
       } else {
         let line = '';
         items.forEach(i => {
@@ -131,13 +136,17 @@
             line += i.char;
           }
         });
-        out += line + '
-';
+        out += line + '\n';
       }
     });
     return out;
   }
-  }
+
+  document.getElementById('copy').onclick = () => {
+    const text = generateANSI(document.getElementById('editor'));
+    navigator.clipboard.writeText(text).then(() => {
+      const t = document.getElementById('toast'); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1500);
+    });
   };
 </script>
 </body>
