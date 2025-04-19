@@ -1,169 +1,251 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Генератор ANSI‑блоков для Discord</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body { font-family: sans-serif; background: #f3f4f6; }
-    #editor { width:100%; max-width:800px; min-height:200px; margin:2rem auto; padding:1rem; background:#fff; border:1px solid #ddd; border-radius:.5rem; white-space: pre-wrap; }
-    .toolbar { position:fixed; top:1rem; right:1rem; width:260px; background:#fff; padding:1rem; border:1px solid #ddd; border-radius:.5rem; }
-    .toolbar button { width:100%; margin-bottom:.5rem; padding:.5rem; border:1px solid #ccc; border-radius:.25rem; cursor:pointer; background:#fafafa; }
-    .toolbar .palette { display:grid; grid-template-columns:repeat(4,1fr); gap:.25rem; margin-bottom:.5rem; }
-    /* Для фоновой палитры 8 цветов в ряд */
-    #bg-palette { grid-template-columns: repeat(8, 1fr); }
-    .palette button { width:100%; height:1.5rem; border:1px solid #ccc; padding:0; }
-    #bold { font-weight:bold; }
-    #underline { text-decoration:underline; }
-    #toast { position:fixed; bottom:1rem; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); color:#fff; padding:.5rem 1rem; border-radius:.5rem; opacity:0; transition:opacity .3s; }
-    #toast.show { opacity:1; }
-  </style>
 </head>
-<body>
-  <h1 style="text-align:center; margin-top:1rem;">Генератор ANSI‑блоков для Discord</h1>
-  <div id="editor" contenteditable></div>
-  <div class="toolbar">
-    <button id="copy">Скопировать в Discord</button>
-    <button id="clear">Очистить форматирование</button>
-    <div style="font-weight:bold; margin-top:1rem;">Цвет текста</div>
-    <div id="fg-palette" class="palette"></div>
-    <div style="font-weight:bold; margin-top:1rem;">Цвет фона</div>
-    <div id="bg-palette" class="palette"></div>
-    <div style="font-weight:bold; margin-top:.5rem;">Стили</div>
-    <button id="bold">B</button>
-    <button id="underline">U</button>
+<body class="bg-gray-900 text-white">
+  <div class="flex h-screen">
+    <!-- Редактор -->
+    <div class="flex-1 p-8 overflow-auto">
+      <h1 class="text-2xl mb-4">Генератор ANSI‑блоков для Discord</h1>
+      <div id="editor"
+           contenteditable="true"
+           class="w-full h-[80vh] bg-gray-800 p-4 rounded border border-gray-700 whitespace-pre-wrap overflow-auto">
+        <!-- Начните писать здесь… -->
+      </div>
+    </div>
+
+    <!-- Панель управления -->
+    <div class="fixed top-24 right-4 w-64 bg-gray-800 p-4 rounded border border-gray-700 shadow-lg">
+      <button id="copy"
+              class="w-full bg-green-600 text-white py-2 rounded mb-2">
+        Скопировать в Discord
+      </button>
+      <button id="clear"
+              class="w-full bg-red-600 text-white py-2 rounded mb-4">
+        Очистить форматирование
+      </button>
+
+      <!-- FG‑палитра -->
+      <div class="mb-2 font-semibold">Цвет текста</div>
+      <div id="fg-palette" class="grid grid-cols-4 gap-1 mb-4">
+        <button data-fg="30" class="w-8 h-8 bg-gray-500 rounded border"></button>
+        <button data-fg="31" class="w-8 h-8 bg-red-600 rounded"></button>
+        <button data-fg="32" class="w-8 h-8 bg-green-600 rounded"></button>
+        <button data-fg="33" class="w-8 h-8 bg-yellow-400 rounded"></button>
+        <button data-fg="34" class="w-8 h-8 bg-blue-600 rounded"></button>
+        <button data-fg="35" class="w-8 h-8 bg-pink-600 rounded"></button>
+        <button data-fg="36" class="w-8 h-8 bg-cyan-400 rounded"></button>
+        <button data-fg="37" class="w-8 h-8 bg-white rounded border"></button>
+      </div>
+
+      <!-- BG‑палитра -->
+      <div class="mb-2 font-semibold">Цвет фона</div>
+      <div id="bg-palette" class="grid grid-cols-4 gap-1 mb-4">
+        <button data-bg="40" class="w-8 h-8 bg-[#23272A] rounded text-white"></button>
+        <button data-bg="41" class="w-8 h-8 bg-[#FF8C00] rounded text-white"></button>
+        <button data-bg="42" class="w-8 h-8 bg-[#5D8AA8] rounded text-white"></button>
+        <button data-bg="43" class="w-8 h-8 bg-[#20B2AA] rounded text-white"></button>
+        <button data-bg="44" class="w-8 h-8 bg-[#708090] rounded text-white"></button>
+        <button data-bg="45" class="w-8 h-8 bg-[#4B0082] rounded text-white"></button>
+        <button data-bg="46" class="w-8 h-8 bg-[#D3D3D3] rounded text-black"></button>
+        <button data-bg="47" class="w-8 h-8 bg-[#FFFFFF] rounded text-black border"></button>
+      </div>
+
+      <!-- Стили -->
+      <div class="mb-2 font-semibold">Стили</div>
+      <div class="flex gap-2">
+        <button id="bold"
+                class="flex-1 border border-gray-600 rounded py-1 font-bold">
+          B
+        </button>
+        <button id="underline"
+                class="flex-1 border border-gray-600 rounded py-1 underline">
+          U
+        </button>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"
+         class="fixed bottom-4 right-4 bg-green-500 text-white py-2 px-4 rounded opacity-0 transition-opacity">
+      Скопировано!
+    </div>
   </div>
-  <div id="toast">Скопировано!</div>
-<script>
-  const ESC='\u001b';
-  // Точные CSS цвета фоновых кодов Discord ANSI
-  const bgCss = [
-    '#2F3136', // Firefly dark background
-    '#E97053', // Orange background
-    '#7289DA', // Marble blue background
-    '#2CDA87', // Greyish turquoise background
-    '#4F545C', // Gray background
-    '#5865F2', // Indigo background
-    '#999DA0', // Light gray background
-    '#FFFFFF'  // White background
-  ];
-  const fgCss = ['#7f8c8d','#e74c3c','#2ecc71','#f1c40f','#3498db','#9b59b6','#1abc9c','#ecf0f1'];
-  const fgCodes=[30,31,32,33,34,35,36,37];
-  const bgCodes=fgCodes.map(c=>c+10);
 
-  // Обёртывание выделения
-  function wrap(type,value){
-    const sel = window.getSelection(); if(!sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    const span = document.createElement('span');
-    span.dataset[type] = value;
-    if(type==='fg') span.style.color = fgCss[fgCodes.indexOf(+value)];
-    if(type==='bg') span.style.backgroundColor = bgCss[bgCodes.indexOf(+value)];
-    if(type==='bold') span.style.fontWeight='bold';
-    if(type==='underline') span.style.textDecoration='underline';
-    span.appendChild(range.extractContents());
-    range.insertNode(span);
-    sel.removeAllRanges();
-  }
-
-  // Палитры
-  const fgCont = document.getElementById('fg-palette');
-  const bgCont = document.getElementById('bg-palette');
-  fgCodes.forEach((c,i)=>{
-    const b=document.createElement('button');
-    b.style.background=fgCss[i];
-    b.onclick=()=>wrap('fg',c);
-    fgCont.appendChild(b);
-  });
-  bgCodes.forEach((c,i)=>{
-    const b=document.createElement('button');
-    b.style.background=bgCss[i];
-    b.onclick=()=>wrap('bg',c);
-    bgCont.appendChild(b);
-  });
-
-  // Стили
-  document.getElementById('bold').onclick = ()=>wrap('bold',1);
-  document.getElementById('underline').onclick = ()=>wrap('underline',4);
-
-  // Очистка форматирования только на выделенной части
-  document.getElementById('clear').onclick = ()=>{
-    const sel = window.getSelection(); if(!sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    const frag = range.extractContents();
-    const cleanFrag = document.createDocumentFragment();
-    function clean(node){
-      if(node.nodeType===Node.ELEMENT_NODE && node.tagName==='SPAN'){
-        node.childNodes.forEach(clean);
-      } else {
-        cleanFrag.appendChild(node.cloneNode(true));
-      }
+  <script>
+    // Оборачивает выделение в <span>, даёт его колбэку, затем вставляет обратно
+    function applyToSelection(fn) {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const fragment = range.extractContents();
+      const wrapper = document.createElement('span');
+      // Начальные значения, если ещё нет
+      wrapper.dataset.bold = wrapper.dataset.bold || '';
+      wrapper.dataset.underline = wrapper.dataset.underline || '';
+      wrapper.dataset.fg = wrapper.dataset.fg || '';
+      wrapper.dataset.bg = wrapper.dataset.bg || '';
+      // Кладём в обёртку
+      wrapper.appendChild(fragment);
+      // Даем пользователю изменить dataset
+      fn(wrapper);
+      // Вставляем обратно
+      range.insertNode(wrapper);
     }
-    frag.childNodes.forEach(clean);
-    range.insertNode(cleanFrag);
-    sel.removeAllRanges();
-  };
 
-  // Генерация ANSI
-  function generateANSI(root){
-    let out='';
-    const ESCsq=ESC;
-    const paras = [];
-    let cur = [];
-    root.childNodes.forEach(n=>{ if(n.nodeType===1 && n.tagName==='BR'){ paras.push(cur); cur=[];} else cur.push(n);} );
-    paras.push(cur);
-    paras.forEach(nodes=>{
-      const chars=[];
-      function rec(node,fmt){
-        const f = Object.assign({},fmt);
-        if(node.nodeType===1 && node.tagName==='SPAN'){
-          if(node.dataset.bold) f.bold=true;
-          if(node.dataset.underline) f.underline=true;
-          if(node.dataset.fg) f.fg=+node.dataset.fg;
-          if(node.dataset.bg) f.bg=+node.dataset.bg;
+    // Очищает только выделенный участок от <span>…</span>
+    function clearFormatting() {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const fragment = range.extractContents();
+
+      function unwrap(node) {
+        if (node.nodeType === 1 && node.tagName === 'SPAN') {
+          const frag = document.createDocumentFragment();
+          node.childNodes.forEach(c => frag.appendChild(unwrap(c)));
+          return frag;
         }
-        if(node.nodeType===3){
-          node.textContent.split('').forEach(ch=>chars.push({ch,fmt: {...f}}));
-        } else if(node.nodeType===1){
-          if(node.tagName==='BR') chars.push({ch:'\n',fmt:{}});
-          else node.childNodes.forEach(c=>rec(c,f));
+        if (node.childNodes) {
+          const copy = node.cloneNode(false);
+          node.childNodes.forEach(c => copy.appendChild(unwrap(c)));
+          return copy;
         }
+        return node.cloneNode();
       }
-      nodes.forEach(n=>rec(n,{}));
-      const hasColor = chars.some(i=>i.fmt.fg!=null || i.fmt.bg!=null);
-      if(hasColor){
-        out += '```ansi\n';
-        let prev = {bold:false,underline:false,fg:null,bg:null};
-        chars.forEach(item=>{
-          const f = item.fmt;
-          if(item.ch!==' ' && item.ch!=='\n' &&
-             (f.bold!==prev.bold||f.underline!==prev.underline||f.fg!==prev.fg||f.bg!==prev.bg)){
-            const codes = [ f.bold?1:0, f.underline?4:0, f.fg!=null?f.fg:0, f.bg!=null?f.bg:0 ];
-            out += ESCsq + '[' + codes.join(';') + 'm';
-            prev = {bold:!!f.bold, underline:!!f.underline, fg:f.fg, bg:f.bg};
+
+      const clean = document.createDocumentFragment();
+      fragment.childNodes.forEach(c => clean.appendChild(unwrap(c)));
+      range.insertNode(clean);
+    }
+
+    // Привязка кнопок
+    document.getElementById('clear').onclick = clearFormatting;
+
+    document.getElementById('fg-palette').onclick = e => {
+      const btn = e.target.closest('button[data-fg]');
+      if (!btn) return;
+      const code = btn.dataset.fg;
+      applyToSelection(span => {
+        span.dataset.fg = code;
+      });
+    };
+
+    document.getElementById('bg-palette').onclick = e => {
+      const btn = e.target.closest('button[data-bg]');
+      if (!btn) return;
+      const code = btn.dataset.bg;
+      applyToSelection(span => {
+        span.dataset.bg = code;
+      });
+    };
+
+    document.getElementById('bold').onclick = () => {
+      applyToSelection(span => {
+        span.dataset.bold = span.dataset.bold === 'true' ? '' : 'true';
+      });
+    };
+
+    document.getElementById('underline').onclick = () => {
+      applyToSelection(span => {
+        span.dataset.underline = span.dataset.underline === 'true' ? '' : 'true';
+      });
+    };
+
+    // Toast
+    function showToast() {
+      const t = document.getElementById('toast');
+      t.classList.add('opacity-100');
+      setTimeout(() => t.classList.remove('opacity-100'), 1200);
+    }
+
+    // Сборка ANSI‑текста
+    function generateANSI() {
+      const editor = document.getElementById('editor');
+      let out = '';
+
+      // Получаем «абзацы» — либо DIVы внутри, либо текстовые узлы
+      const paras = [];
+      editor.childNodes.forEach(n => {
+        if (n.nodeType === 1 && (n.tagName === 'DIV' || n.tagName === 'P')) {
+          paras.push(n);
+        } else if (n.nodeType === 3 && n.textContent.trim() !== '') {
+          paras.push(n);
+        }
+      });
+
+      paras.forEach(p => {
+        // Собираем массив {char, fmt}
+        const items = [];
+        function traverse(node, fmt) {
+          if (node.nodeType === 3) {
+            for (let ch of node.textContent) {
+              items.push({ char: ch, fmt: { ...fmt } });
+            }
+          } else if (node.nodeType === 1 && node.tagName === 'SPAN') {
+            const f2 = { ...fmt };
+            if (node.dataset.bold === 'true') f2.bold = true;
+            if (node.dataset.underline === 'true') f2.underline = true;
+            if (node.dataset.fg) f2.fg = node.dataset.fg;
+            if (node.dataset.bg) f2.bg = node.dataset.bg;
+            node.childNodes.forEach(c => traverse(c, f2));
+          } else {
+            node.childNodes.forEach(c => traverse(c, fmt));
           }
-          out += item.ch;
-        });
-        out += ESCsq + '[0;0;0;0m\n```\n';
-      } else {
-        let line='';
-        chars.forEach(item=>{
-          if(item.fmt.bold && item.ch.trim()) line+='**'+item.ch+'**';
-          else line+=item.ch;
-        });
-        out+= line + '\n';
-      }
-    });
-    return out;
-  }
+        }
 
-  // Копировать
-  document.getElementById('copy').onclick = ()=>{
-    const txt = generateANSI(document.getElementById('editor'));
-    navigator.clipboard.writeText(txt)
-      .then(()=>{ const t=document.getElementById('toast'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500); });
-  };
-</script>
+        // Начальный формат
+        traverse(p, { bold: false, underline: false, fg: '0', bg: '0' });
+
+        const hasColor = items.some(it => it.fmt.fg !== '0' || it.fmt.bg !== '0');
+        if (!hasColor) {
+          // Markdown‑bold абзац
+          const raw = p.nodeType === 3 ? p.textContent : p.textContent;
+          const needBold = items.some(it => it.fmt.bold);
+          out += needBold ? `**${raw}**\n` : `${raw}\n`;
+        } else {
+          // ANSI‑блок
+          out += '```ansi\n';
+          let prev = { bold: false, underline: false, fg: '0', bg: '0' };
+          for (let it of items) {
+            if (it.char === '\n') continue;
+            const f = it.fmt;
+            const changed =
+              f.bold  !== prev.bold  ||
+              f.underline !== prev.underline ||
+              f.fg    !== prev.fg    ||
+              f.bg    !== prev.bg;
+
+            if (changed && it.char !== ' ') {
+              // Формируем всегда четыре кода
+              const codes = [
+                f.bold ? 1 : 0,
+                f.underline ? 4 : 0,
+                Number(f.fg),
+                Number(f.bg)
+              ];
+              out += `\u001b[${codes.join(';')}m`;
+              prev = { ...f };
+            }
+            out += it.char;
+          }
+          // Общий сброс
+          out += '\u001b[0;0;0;0m\n```\n';
+        }
+      });
+
+      return out;
+    }
+
+    // Копировать
+    document.getElementById('copy').onclick = () => {
+      const txt = generateANSI();
+      navigator.clipboard.writeText(txt).then(showToast);
+    };
+  </script>
 </body>
 </html>
