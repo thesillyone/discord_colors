@@ -45,82 +45,98 @@
     {code:'0;40',css:'darkblue'},{code:'0;41',css:'orange'},{code:'0;42',css:'skyblue'},{code:'0;43',css:'turquoise'},
     {code:'0;44',css:'gray'},{code:'0;45',css:'indigo'},{code:'0;46',css:'lightgray'},{code:'0;47',css:'white'}
   ];
+
+  // Заполняем палитру
   const palette = document.getElementById('palette');
-  paletteData.forEach(item=>{
-    const btn=document.createElement('button');
-    btn.className='w-8 h-8 rounded-lg border border-gray-300';
-    btn.style.backgroundColor=item.css;
-    btn.title='['+item.code+'m';
-    btn.dataset.ansi=ESC+'['+item.code+'m';
-    btn.onclick=()=>applyAnsi(btn.dataset.ansi);
+  paletteData.forEach(item => {
+    const btn = document.createElement('button');
+    btn.className = 'w-8 h-8 rounded-lg border border-gray-300';
+    btn.style.backgroundColor = item.css;
+    btn.title = '[' + item.code + 'm';
+    btn.dataset.ansi = ESC + '[' + item.code + 'm';
+    btn.addEventListener('click', () => wrapSelection(item.css, btn.dataset.ansi, 'color'));
     palette.appendChild(btn);
   });
 
-  function applyAnsi(code){
-    const sel=window.getSelection(); if(!sel.rangeCount) return;
-    const range=sel.getRangeAt(0);
-    const span=document.createElement('span');
-    span.dataset.ansi=code;
-    // визуализация
-    const item=paletteData.find(i=>ESC+'['+i.code+'m'===code);
-    if(parseInt(item.code.split(';')[1])<40) span.style.color=item.css;
-    else span.style.backgroundColor=item.css;
-    range.surroundContents(span);
+  // Универсальная обёртка выделения
+  function wrapSelection(cssValue, ansiCode, mode) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const frag = range.extractContents();
+    const span = document.createElement('span');
+    span.dataset.ansi = ansiCode;
+    if (mode === 'color') span.style.color = cssValue;
+    if (mode === 'bg') span.style.backgroundColor = cssValue;
+    if (mode === 'style') {
+      // стили: ansiCode содержит '[x;30m'
+      // чтобы визуализировать, применяем через CSS
+      const codeNum = ansiCode.match(/\[(\d+);/)[1];
+      if (codeNum === '1') span.style.fontWeight = 'bold';
+      if (codeNum === '2') span.style.fontStyle = 'italic';
+      if (codeNum === '4') span.style.textDecoration = 'underline';
+    }
+    span.appendChild(frag);
+    range.insertNode(span);
     sel.removeAllRanges();
   }
 
-  // стили
-  const styleButtons={'bold':'1;30','italic':'2;30','underline':'4;30'};
-  Object.entries(styleButtons).forEach(([id,codeStr])=>{
-    document.getElementById(id).onclick=()=>{
-      const sel=window.getSelection(); if(!sel.rangeCount) return;
-      const range=sel.getRangeAt(0);
-      const span=document.createElement('span');
-      const code=ESC+'['+codeStr+'m';
-      span.dataset.ansi=code;
-      if(id==='bold') span.style.fontWeight='bold';
-      if(id==='italic') span.style.fontStyle='italic';
-      if(id==='underline') span.style.textDecoration='underline';
-      range.surroundContents(span);
-      sel.removeAllRanges();
-    };
+  // Стили
+  const styleMap = { bold: '1;30', italic: '2;30', underline: '4;30' };
+  Object.keys(styleMap).forEach(id => {
+    document.getElementById(id).addEventListener('click', () => {
+      const code = ESC + '[' + styleMap[id] + 'm';
+      wrapSelection(null, code, 'style');
+    });
   });
 
-  // очистить форматирование в выделении
-  document.getElementById('clear-format').onclick=()=>{
-    const sel=window.getSelection(); if(!sel.rangeCount) return;
-    const range=sel.getRangeAt(0);
-    const frag=range.cloneContents();
-    const text=frag.textContent;
+  // Очистка форматирования
+  document.getElementById('clear-format').addEventListener('click', () => {
+    const sel = window.getSelection(); if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const frag = range.cloneContents();
+    const text = frag.textContent;
     range.deleteContents();
     range.insertNode(document.createTextNode(text));
     sel.removeAllRanges();
-  };
+  });
 
-  // генерация текста
-  function generate(root){
-    let out='';
-    let inside=false;
-    const open=()=>{if(!inside){out+='```ansi\n';inside=true;}};
-    const close=()=>{if(inside){out+='\n```';inside=false;}};
-    const walk=node=>{
-      if(node.nodeType===Node.TEXT_NODE){out+=node.textContent;if(/\S/.test(node.textContent)&&!node.parentElement.dataset.ansi)close();return;}
-      if(node.nodeType!==Node.ELEMENT_NODE) return;
-      if(node.tagName==='BR'){out+='\n';return;}
-      if(node.dataset.ansi){open();out+=node.dataset.ansi;node.childNodes.forEach(walk);out+=ESC+'[0m';}
-      else node.childNodes.forEach(walk);
-    };
+  // Генерация текста
+  function generate(root) {
+    let out = '';
+    let inside = false;
+    const open = () => { if (!inside) { out += '```ansi\n'; inside = true; } };
+    const close = () => { if (inside) { out += '\n```'; inside = false; } };
+
+    function walk(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        out += node.textContent;
+        if (/\S/.test(node.textContent) && !node.parentElement.dataset.ansi) close();
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      if (node.tagName === 'BR') { out += '\n'; return; }
+      if (node.dataset.ansi) {
+        open(); out += node.dataset.ansi;
+        node.childNodes.forEach(walk);
+        out += ESC + '[0m';
+      } else node.childNodes.forEach(walk);
+    }
+
     root.childNodes.forEach(walk);
-    close();return out.trim();
+    close();
+    return out.trim();
   }
 
-  document.getElementById('copy').onclick=()=>{
-    const text=generate(document.getElementById('editor'));
-    navigator.clipboard.writeText(text).then(()=>{
-      const t=document.getElementById('toast');t.classList.add('show');
-      setTimeout(()=>t.classList.remove('show'),1200);
+  // Копировать
+  document.getElementById('copy').addEventListener('click', () => {
+    const text = generate(document.getElementById('editor'));
+    navigator.clipboard.writeText(text).then(() => {
+      const t = document.getElementById('toast');
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1200);
     });
-  };
+  });
 </script>
 </body>
 </html>
