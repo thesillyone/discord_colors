@@ -6,15 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Tailwind CDN for quick styling -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    #editor span{font-style:italic}
-  </style>
+  <style>#editor span{font-style:italic}</style>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
   <h1 class="text-2xl font-bold mb-4">Discord ANSI Color‑Block Generator</h1>
 
   <div class="w-full max-w-3xl space-y-4">
-    <!-- Editable area -->
+    <!-- Editable text area -->
     <div>
       <label class="font-semibold mb-1 block" for="editor">Editable text:</label>
       <div id="editor" contenteditable="true" class="border border-gray-300 rounded-lg p-4 bg-white min-h-[200px] whitespace-pre-wrap"></div>
@@ -25,7 +23,7 @@
       <input type="color" id="colorPicker" value="#22a034" class="w-10 h-10 p-0 border-0 cursor-pointer" title="Custom colour"/>
       <button id="applyColor" class="bg-blue-600 text-white px-4 py-2 rounded-lg shadow">Apply colour</button>
 
-      <!-- 5×5 preset palette -->
+      <!-- 5 × 5 preset palette -->
       <div id="palette" class="grid grid-cols-5 gap-1"></div>
     </div>
 
@@ -42,11 +40,11 @@
     </div>
   </div>
 
-  <footer class="mt-4 text-sm text-gray-500">Save this file (or host it via GitHub Pages) – it’s completely client‑side, no backend needed.</footer>
+  <footer class="mt-4 text-sm text-gray-500">Pure client‑side. Host as‑is on GitHub Pages.</footer>
 
 <script>
   // ---------------------------------------------------------------------------
-  //  Colour palette setup (25 presets, light → dark, 5 hues)
+  //  Palette (25 presets, 5 hues × 5 shades)
   // ---------------------------------------------------------------------------
   const presetColors=[
     // yellows
@@ -60,16 +58,15 @@
     // purples
     "#e1bee7","#ce93d8","#ba68c8","#9c27b0","#7b1fa2"
   ];
-  const paletteContainer=document.getElementById("palette");
-  const colorPicker=document.getElementById("colorPicker");
+  const palette=document.getElementById("palette");
+  const picker=document.getElementById("colorPicker");
   presetColors.forEach(col=>{
-    const btn=document.createElement("button");
-    btn.dataset.color=col;
-    btn.title=col;
-    btn.className="w-8 h-8 rounded-lg border border-gray-300";
-    btn.style.background=col;
-    btn.onclick=()=>{colorPicker.value=col;applyColor(col);};
-    paletteContainer.appendChild(btn);
+    const b=document.createElement("button");
+    b.className="w-8 h-8 rounded-lg border border-gray-300";
+    b.style.background=col;
+    b.title=col;
+    b.onclick=()=>{picker.value=col;applyColor(col);};
+    palette.appendChild(b);
   });
 
   // ---------------------------------------------------------------------------
@@ -77,47 +74,58 @@
   const editor=document.getElementById("editor");
   const output=document.getElementById("output");
 
-  // Apply colour to current selection -----------------------------------------
+  // Apply colour --------------------------------------------------------------
   function applyColor(col){
-    document.execCommand("styleWithCSS", true, null);
-    document.execCommand("foreColor", false, col);
+    document.execCommand("styleWithCSS",true,null);
+    document.execCommand("foreColor",false,col);
   }
-  document.getElementById("applyColor").onclick=()=>applyColor(colorPicker.value);
+  document.getElementById("applyColor").onclick=()=>applyColor(picker.value);
 
   // Helpers -------------------------------------------------------------------
-  function rgbStringToComponents(rgb){
+  function rgbToAnsi(rgb){
     const m=rgb.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-    return m?{r:+m[1],g:+m[2],b:+m[3]}:{r:255,g:255,b:255};
-  }
-  function ansiForColor(rgb){
-    const {r,g,b}=rgbStringToComponents(rgb);
+    const [r,g,b]=m?m.slice(1).map(Number):[255,255,255];
     return `${ESC}[38;2;${r};${g};${b}m`;
   }
 
-  // HTML → Discord with separate ANSI blocks ----------------------------------
+  // Conversion ----------------------------------------------------------------
   function generateDiscordText(root){
     let out="";
+    let inside=false;
+
+    function open(){
+      if(!inside){ out+="```ansi\n"; inside=true; }
+    }
+    function close(){
+      if(inside){ out+="\n```"; inside=false; }
+    }
 
     function walk(node){
       if(node.nodeType===Node.TEXT_NODE){
-        out+=node.textContent;
+        const txt=node.textContent;
+        out+=txt;
+        if(/\S/.test(txt) && !node.parentElement.style.color){
+          // narration – close if we were inside
+          close();
+        }
         return;
       }
       if(node.nodeType!==Node.ELEMENT_NODE) return;
-      if(node.tagName==="BR"){out+="\n";return;}
+      if(node.tagName==="BR"){ out+="\n"; return; }
 
-      const color=node.style.color;
-      if(color){
-        // start a fresh block for every coloured span
-        out+=`\u0060\u0060\u0060ansi\n`+ansiForColor(color);
+      const col=node.style.color;
+      if(col){
+        open();
+        out+=rgbToAnsi(col);
         node.childNodes.forEach(walk);
-        out+=`${ESC}[0m\n\u0060\u0060\u0060`;
-      }else{
+        out+=`${ESC}[0m`; // reset but stay inside block
+      } else {
         node.childNodes.forEach(walk);
       }
     }
 
     root.childNodes.forEach(walk);
+    close();
     return out.trim();
   }
 
