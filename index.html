@@ -127,8 +127,7 @@
           node.textContent.split('').forEach(ch => chars.push({ ch, fmt: { ...f } }));
         } else if (node.nodeType === Node.ELEMENT_NODE) {
           if (node.tagName === 'BR') {
-            chars.push({ ch: '
-', fmt: {} });
+            chars.push({ ch: '\n', fmt: {} });
           } else {
             node.childNodes.forEach(c => rec(c, f));
           }
@@ -142,8 +141,7 @@
         let prevCodes = '';
         chars.forEach(item => {
           const f = item.fmt;
-          if (item.ch !== '
-') {
+          if (item.ch !== '\n') {
             const codes = [];
             if (f.bold) codes.push(1);
             if (f.underline) codes.push(4);
