@@ -66,12 +66,14 @@
       const temp=document.createElement('span'); nodes.forEach(n=>temp.appendChild(n.cloneNode(true)));
       const hasColor=temp.querySelector('[data-fg], [data-bg]'), hasBold=temp.querySelector('[data-bold]');
       if(hasColor){
-        out+='```ansi\n'; let prev=[];
+        out+='```ansi
+'; let prev=[];
         function emit(codes){ out+=ESC+'['+(codes.length?codes.join(';'):'0')+'m'; prev=codes.slice(); }
         function walk(n){
-          if(n.nodeType===3){ if(prev.length) emit([]); out+=n.textContent; return; }
+          if(n.nodeType===3){ out+=n.textContent; return; }
           if(n.nodeType!==1) return;
-          if(n.tagName==='BR'){ out+='\n'; return; }
+          if(n.tagName==='BR'){ out+='
+'; return; }
           if(n.tagName==='SPAN'){
             const codes=[];
             if(n.dataset.bold) codes.push('1');
@@ -84,13 +86,18 @@
         }
         walk(temp);
         if(prev.length) out+=ESC+'[0m';
-        out+='\n```\n';
+        out+='
+```
+';
       } else if(hasBold){
         let line=''; temp.childNodes.forEach(n=>{ if(n.nodeType===3) line+=n.textContent; else if(n.dataset.bold) line+='**'+n.textContent+'**'; else line+=n.textContent; });
-        out+=line+'\n';
-      } else out+=temp.textContent+'\n';
+        out+=line+'
+';
+      } else out+=temp.textContent+'
+';
     });
     return out;
+  }
   }
   document.getElementById('copy').onclick=()=>{
     const txt=generateANSI(document.getElementById('editor'));
