@@ -37,7 +37,7 @@
   console.log('ANSI Discord Generator script loaded');
   const ESC = '\u001b';
   const bgCss = ['#002b36','#cb4b16','#586e75','#657b83','#839496','#6c71c4','#93a1a1','#fdf6e3'];
-  const fgCss = ['#7f8c8d','#e74c3c','#2ecc71','#f1c40f','#3498db','#9b59b6','#1abc9c','#ecf0f1'];
+  const fgCss = ['#586e75','#dc322f','#859900','#b58900','#268bd2','#d33682','#2aa198','#eee8d5'];
   const fgCodes = [30,31,32,33,34,35,36,37];
   const bgCodes = fgCodes.map(c => c + 10);
 
@@ -116,13 +116,13 @@
         let prevCodes = '';
         chars.forEach(item => {
           const f = item.fmt;
-          if (item.ch !== '\n') {
-            const codes = [
-              f.bold ? 1 : 0,
-              f.underline ? 4 : 0,
-              f.fg != null ? f.fg : 0,
-              f.bg != null ? f.bg : 0
-            ];
+          if (item.ch !== '
+') {
+            const codes = [];
+            if (f.bold) codes.push(1);
+            if (f.underline) codes.push(4);
+            if (f.fg != null) codes.push(f.fg);
+            if (f.bg != null) codes.push(f.bg);
             const codeStr = codes.join(';');
             if (codeStr !== prevCodes) {
               out += ESC + '[' + codeStr + 'm';
