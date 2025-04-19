@@ -134,8 +134,7 @@
         node.textContent.split('').forEach(ch => chars.push({ ch, fmt: { ...f } }));
       } else if (node.nodeType === 1) {
         if (node.tagName === 'BR') {
-          chars.push({ ch: '
-', fmt: {} });
+          chars.push({ ch: '\n', fmt: {} });
         } else {
           Array.from(node.childNodes).forEach(c => recurse(c, f));
         }
@@ -146,8 +145,7 @@
     const hasColor = chars.some(c => c.fmt.fg != null || c.fmt.bg != null);
     console.log('Paragraph', pi, 'hasColor:', hasColor, 'chars count:', chars.length);
     if (hasColor) {
-      out += '```ansi
-';
+      out += '```ansi\n';
       let prevCodes = '';
       chars.forEach((item, ci) => {
         const { ch, fmt } = item;
