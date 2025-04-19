@@ -7,11 +7,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     #editor span { font-style: italic; }
-    /* Стиль кнопок эффектов */
     #bold { font-weight: bold; }
-    #italic { font-style: italic; }
     #underline { text-decoration: underline; }
-    /* Toast */
     .toast { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: .5rem 1rem; border-radius: .5rem; opacity: 0; transition: opacity .3s; pointer-events: none; }
     .toast.show { opacity: 1; }
   </style>
@@ -25,12 +22,13 @@
   <div class="fixed top-24 right-4 w-60 bg-white p-4 rounded-lg shadow-lg">
     <button id="copy" class="w-full bg-green-600 text-white py-2 rounded-lg mb-2">Скопировать в Discord</button>
     <button id="clear-format" class="w-full bg-red-500 text-white py-2 rounded-lg mb-4">Очистить форматирование</button>
-    <div class="mb-2 font-semibold">Цвета</div>
-    <div id="palette" class="grid grid-cols-4 gap-1 mb-4"></div>
+    <div class="mb-2 font-semibold">Цвет текста</div>
+    <div id="fg-palette" class="grid grid-cols-4 gap-1 mb-4"></div>
+    <div class="mb-2 font-semibold">Цвет фона</div>
+    <div id="bg-palette" class="grid grid-cols-4 gap-1 mb-4"></div>
     <div class="mb-2 font-semibold">Стили</div>
     <div class="flex gap-2">
       <button id="bold" title="Жирный" class="flex-1 border border-gray-400 rounded-lg py-1">B</button>
-      <button id="italic" title="Курсив" class="flex-1 border border-gray-400 rounded-lg py-1">I</button>
       <button id="underline" title="Подчёркнутый" class="flex-1 border border-gray-400 rounded-lg py-1">U</button>
     </div>
   </div>
@@ -39,104 +37,104 @@
 
 <script>
   const ESC = '\u001b';
-  const paletteData = [
-    {code:'0;30',css:'gray'},{code:'0;31',css:'red'},{code:'0;32',css:'green'},{code:'0;33',css:'yellow'},
-    {code:'0;34',css:'blue'},{code:'0;35',css:'magenta'},{code:'0;36',css:'cyan'},{code:'0;37',css:'white'},
-    {code:'0;40',css:'darkblue'},{code:'0;41',css:'orange'},{code:'0;42',css:'skyblue'},{code:'0;43',css:'turquoise'},
-    {code:'0;44',css:'gray'},{code:'0;45',css:'indigo'},{code:'0;46',css:'lightgray'},{code:'0;47',css:'white'}
-  ];
+  const colors = [30,31,32,33,34,35,36,37];
+  const paletteColors = ['gray','red','green','yellow','blue','magenta','cyan','white'];
 
-  // Заполняем палитру
-  const palette = document.getElementById('palette');
-  paletteData.forEach(item => {
-    const btn = document.createElement('button');
-    btn.className = 'w-8 h-8 rounded-lg border border-gray-300';
-    btn.style.backgroundColor = item.css;
-    btn.title = '[' + item.code + 'm';
-    btn.dataset.ansi = ESC + '[' + item.code + 'm';
-    btn.addEventListener('click', () => wrapSelection(item.css, btn.dataset.ansi, 'color'));
-    palette.appendChild(btn);
-  });
+  function makePalette(containerId, isBg) {
+    const cont = document.getElementById(containerId);
+    colors.forEach((code, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'w-8 h-8 rounded-lg border border-gray-300';
+      btn.style.backgroundColor = paletteColors[i];
+      btn.title = '[' + '0;' + code + (isBg?';40m':';0m');
+      btn.onclick = () => wrapFormat(isBg?'bg': 'fg', code);
+      cont.appendChild(btn);
+    });
+  }
+  makePalette('fg-palette', false);
+  makePalette('bg-palette', true);
 
-  // Универсальная обёртка выделения
-  function wrapSelection(cssValue, ansiCode, mode) {
-    const sel = window.getSelection();
-    if (!sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    const frag = range.extractContents();
-    const span = document.createElement('span');
-    span.dataset.ansi = ansiCode;
-    if (mode === 'color') span.style.color = cssValue;
-    if (mode === 'bg') span.style.backgroundColor = cssValue;
-    if (mode === 'style') {
-      // стили: ansiCode содержит '[x;30m'
-      // чтобы визуализировать, применяем через CSS
-      const codeNum = ansiCode.match(/\[(\d+);/)[1];
-      if (codeNum === '1') span.style.fontWeight = 'bold';
-      if (codeNum === '2') span.style.fontStyle = 'italic';
-      if (codeNum === '4') span.style.textDecoration = 'underline';
+  function wrapFormat(type, code) {
+    const sel = window.getSelection(); if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0).cloneRange();
+    // if selection inside span, update that span
+    let span = sel.anchorNode.parentElement;
+    if (span.tagName!=='SPAN' || span.id==='editor') {
+      span = document.createElement('span');
+      range.surroundContents(span);
     }
-    span.appendChild(frag);
-    range.insertNode(span);
+    // toggle or set
+    if (type==='fg') {
+      if (span.dataset.fg==code) delete span.dataset.fg;
+      else span.dataset.fg = code;
+      span.style.color = span.dataset.fg?paletteColors[colors.indexOf(parseInt(span.dataset.fg))]:null;
+    } else if (type==='bg') {
+      if (span.dataset.bg==code) delete span.dataset.bg;
+      else span.dataset.bg = code;
+      span.style.backgroundColor = span.dataset.bg?paletteColors[colors.indexOf(parseInt(span.dataset.bg))]:null;
+    }
     sel.removeAllRanges();
   }
 
-  // Стили
-  const styleMap = { bold: '1;30', italic: '2;30', underline: '4;30' };
-  Object.keys(styleMap).forEach(id => {
-    document.getElementById(id).addEventListener('click', () => {
-      const code = ESC + '[' + styleMap[id] + 'm';
-      wrapSelection(null, code, 'style');
-    });
-  });
+  // стили
+  document.getElementById('bold').onclick = () => toggleStyle('bold');
+  document.getElementById('underline').onclick = () => toggleStyle('underline');
+  function toggleStyle(style) {
+    const sel = window.getSelection(); if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0).cloneRange();
+    let span = sel.anchorNode.parentElement;
+    if (span.tagName!=='SPAN' || span.id==='editor') {
+      span = document.createElement('span');
+      range.surroundContents(span);
+    }
+    if (style==='bold') {
+      if (span.dataset.bold) { delete span.dataset.bold; span.style.fontWeight=null; }
+      else { span.dataset.bold=1; span.style.fontWeight='bold'; }
+    } else if (style==='underline') {
+      if (span.dataset.underline) { delete span.dataset.underline; span.style.textDecoration=null; }
+      else { span.dataset.underline=4; span.style.textDecoration='underline'; }
+    }
+    sel.removeAllRanges();
+  }
 
-  // Очистка форматирования
-  document.getElementById('clear-format').addEventListener('click', () => {
+  document.getElementById('clear-format').onclick = () => {
     const sel = window.getSelection(); if (!sel.rangeCount) return;
     const range = sel.getRangeAt(0);
-    const frag = range.cloneContents();
-    const text = frag.textContent;
+    const text = range.toString();
     range.deleteContents();
     range.insertNode(document.createTextNode(text));
     sel.removeAllRanges();
-  });
+  };
 
-  // Генерация текста
+  // генерация
   function generate(root) {
     let out = '';
-    let inside = false;
-    const open = () => { if (!inside) { out += '```ansi\n'; inside = true; } };
-    const close = () => { if (inside) { out += '\n```'; inside = false; } };
-
+    const open = codes => out += '```ansi\n' + ESC+'['+codes.join(';')+'m';
+    const close = () => out += ESC+'[0m\n```';
     function walk(node) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        out += node.textContent;
-        if (/\S/.test(node.textContent) && !node.parentElement.dataset.ansi) close();
-        return;
+      if (node.nodeType===3) { out+=node.textContent; return; }
+      if (node.nodeType!==1) return;
+      if (node.tagName==='BR') { out+='\n'; return; }
+      if (node.tagName==='SPAN') {
+        const codes=[];
+        if (node.dataset.bold) codes.push('1');
+        if (node.dataset.underline) codes.push('4');
+        if (node.dataset.fg) codes.push(node.dataset.fg);
+        if (node.dataset.bg) codes.push((parseInt(node.dataset.bg)+10).toString());
+        if (codes.length) { open(codes); node.childNodes.forEach(walk); close(); return; }
       }
-      if (node.nodeType !== Node.ELEMENT_NODE) return;
-      if (node.tagName === 'BR') { out += '\n'; return; }
-      if (node.dataset.ansi) {
-        open(); out += node.dataset.ansi;
-        node.childNodes.forEach(walk);
-        out += ESC + '[0m';
-      } else node.childNodes.forEach(walk);
+      node.childNodes.forEach(walk);
     }
-
     root.childNodes.forEach(walk);
-    close();
-    return out.trim();
+    return out;
   }
 
-  // Копировать
-  document.getElementById('copy').addEventListener('click', () => {
+  document.getElementById('copy').onclick = () => {
     const text = generate(document.getElementById('editor'));
-    navigator.clipboard.writeText(text).then(() => {
-      const t = document.getElementById('toast');
-      t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 1200);
+    navigator.clipboard.writeText(text).then(()=>{
+      const t=document.getElementById('toast'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1200);
     });
-  });
+  };
 </script>
 </body>
 </html>
