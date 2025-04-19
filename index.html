@@ -7,7 +7,12 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     #editor span { font-style: italic; }
-    .toast { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); color: #fff; padding: 0.5rem 1rem; border-radius: 0.5rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+    /* Стиль кнопок эффектов */
+    #bold { font-weight: bold; }
+    #italic { font-style: italic; }
+    #underline { text-decoration: underline; }
+    /* Toast */
+    .toast { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: .5rem 1rem; border-radius: .5rem; opacity: 0; transition: opacity .3s; pointer-events: none; }
     .toast.show { opacity: 1; }
   </style>
 </head>
@@ -19,7 +24,7 @@
 
   <div class="fixed top-24 right-4 w-60 bg-white p-4 rounded-lg shadow-lg">
     <button id="copy" class="w-full bg-green-600 text-white py-2 rounded-lg mb-2">Скопировать в Discord</button>
-    <button id="clear" class="w-full bg-red-500 text-white py-2 rounded-lg mb-4">Очистить текст</button>
+    <button id="clear-format" class="w-full bg-red-500 text-white py-2 rounded-lg mb-4">Очистить форматирование</button>
     <div class="mb-2 font-semibold">Цвета</div>
     <div id="palette" class="grid grid-cols-4 gap-1 mb-4"></div>
     <div class="mb-2 font-semibold">Стили</div>
@@ -35,93 +40,85 @@
 <script>
   const ESC = '\u001b';
   const paletteData = [
-    {code: '0;30', css: 'gray'}, {code: '0;31', css: 'red'}, {code: '0;32', css: 'green'}, {code: '0;33', css: 'yellow'},
-    {code: '0;34', css: 'blue'}, {code: '0;35', css: 'magenta'}, {code: '0;36', css: 'cyan'}, {code: '0;37', css: 'white'},
-    {code: '0;40', css: 'darkblue'}, {code: '0;41', css: 'orange'}, {code: '0;42', css: 'skyblue'}, {code: '0;43', css: 'turquoise'},
-    {code: '0;44', css: 'gray'}, {code: '0;45', css: 'indigo'}, {code: '0;46', css: 'lightgray'}, {code: '0;47', css: 'white'}
+    {code:'0;30',css:'gray'},{code:'0;31',css:'red'},{code:'0;32',css:'green'},{code:'0;33',css:'yellow'},
+    {code:'0;34',css:'blue'},{code:'0;35',css:'magenta'},{code:'0;36',css:'cyan'},{code:'0;37',css:'white'},
+    {code:'0;40',css:'darkblue'},{code:'0;41',css:'orange'},{code:'0;42',css:'skyblue'},{code:'0;43',css:'turquoise'},
+    {code:'0;44',css:'gray'},{code:'0;45',css:'indigo'},{code:'0;46',css:'lightgray'},{code:'0;47',css:'white'}
   ];
   const palette = document.getElementById('palette');
-  // Создание кнопок палитры
-  paletteData.forEach(item => {
-    const btn = document.createElement('button');
-    btn.className = 'w-8 h-8 rounded-lg border border-gray-300';
-    // Показываем цвет в фоне кнопки всегда для наглядности
-    btn.style.backgroundColor = item.css;
-    btn.title = '[' + item.code + 'm';
-    btn.dataset.ansi = ESC + '[' + item.code + 'm';
-    btn.onclick = () => applyAnsi(btn.dataset.ansi);
+  paletteData.forEach(item=>{
+    const btn=document.createElement('button');
+    btn.className='w-8 h-8 rounded-lg border border-gray-300';
+    btn.style.backgroundColor=item.css;
+    btn.title='['+item.code+'m';
+    btn.dataset.ansi=ESC+'['+item.code+'m';
+    btn.onclick=()=>applyAnsi(btn.dataset.ansi);
     palette.appendChild(btn);
   });
 
-  function applyAnsi(code) {
-    const sel = window.getSelection(); if (!sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    const span = document.createElement('span');
-    span.dataset.ansi = code;
-    // визуализация: аналогично кнопке
-    const item = paletteData.find(i => ESC + '[' + i.code + 'm === code);
-    if (parseInt(item.code.split(';')[1]) < 40) span.style.color = item.css;
-    else span.style.backgroundColor = item.css;
+  function applyAnsi(code){
+    const sel=window.getSelection(); if(!sel.rangeCount) return;
+    const range=sel.getRangeAt(0);
+    const span=document.createElement('span');
+    span.dataset.ansi=code;
+    // визуализация
+    const item=paletteData.find(i=>ESC+'['+i.code+'m'===code);
+    if(parseInt(item.code.split(';')[1])<40) span.style.color=item.css;
+    else span.style.backgroundColor=item.css;
     range.surroundContents(span);
     sel.removeAllRanges();
   }
 
   // стили
-  const styleButtons = {
-    bold: '1;30',
-    italic: '2;30',
-    underline: '4;30'
-  };
-  Object.keys(styleButtons).forEach(id => {
-    document.getElementById(id).onclick = () => {
-      const codeStr = styleButtons[id];
-      const code = ESC + '[' + codeStr + 'm';
-      const sel = window.getSelection(); if (!sel.rangeCount) return;
-      const range = sel.getRangeAt(0);
-      const span = document.createElement('span');
-      span.dataset.ansi = code;
-      if (id === 'bold') span.style.fontWeight = 'bold';
-      if (id === 'italic') span.style.fontStyle = 'italic';
-      if (id === 'underline') span.style.textDecoration = 'underline';
+  const styleButtons={'bold':'1;30','italic':'2;30','underline':'4;30'};
+  Object.entries(styleButtons).forEach(([id,codeStr])=>{
+    document.getElementById(id).onclick=()=>{
+      const sel=window.getSelection(); if(!sel.rangeCount) return;
+      const range=sel.getRangeAt(0);
+      const span=document.createElement('span');
+      const code=ESC+'['+codeStr+'m';
+      span.dataset.ansi=code;
+      if(id==='bold') span.style.fontWeight='bold';
+      if(id==='italic') span.style.fontStyle='italic';
+      if(id==='underline') span.style.textDecoration='underline';
       range.surroundContents(span);
       sel.removeAllRanges();
     };
   });
 
-  // очистка
-  document.getElementById('clear').onclick = () => {
-    document.getElementById('editor').innerHTML = '';
+  // очистить форматирование в выделении
+  document.getElementById('clear-format').onclick=()=>{
+    const sel=window.getSelection(); if(!sel.rangeCount) return;
+    const range=sel.getRangeAt(0);
+    const frag=range.cloneContents();
+    const text=frag.textContent;
+    range.deleteContents();
+    range.insertNode(document.createTextNode(text));
+    sel.removeAllRanges();
   };
 
   // генерация текста
-  function generate(root) {
-    let out = '';
-    let inside = false;
-    function open() { if (!inside) { out += '```ansi\n'; inside = true; } }
-    function close() { if (inside) { out += '\n```'; inside = false; } }
-    function walk(node) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        out += node.textContent;
-        if (/\S/.test(node.textContent) && !node.parentElement.dataset.ansi) close();
-        return;
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) return;
-      if (node.tagName === 'BR') { out += '\n'; return; }
-      if (node.dataset.ansi) {
-        open(); out += node.dataset.ansi;
-        node.childNodes.forEach(walk);
-        out += ESC + '[0m';
-      } else node.childNodes.forEach(walk);
-    }
+  function generate(root){
+    let out='';
+    let inside=false;
+    const open=()=>{if(!inside){out+='```ansi\n';inside=true;}};
+    const close=()=>{if(inside){out+='\n```';inside=false;}};
+    const walk=node=>{
+      if(node.nodeType===Node.TEXT_NODE){out+=node.textContent;if(/\S/.test(node.textContent)&&!node.parentElement.dataset.ansi)close();return;}
+      if(node.nodeType!==Node.ELEMENT_NODE) return;
+      if(node.tagName==='BR'){out+='\n';return;}
+      if(node.dataset.ansi){open();out+=node.dataset.ansi;node.childNodes.forEach(walk);out+=ESC+'[0m';}
+      else node.childNodes.forEach(walk);
+    };
     root.childNodes.forEach(walk);
-    close(); return out.trim();
+    close();return out.trim();
   }
 
-  document.getElementById('copy').onclick = () => {
-    const text = generate(document.getElementById('editor'));
-    navigator.clipboard.writeText(text).then(() => {
-      const t = document.getElementById('toast'); t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 1200);
+  document.getElementById('copy').onclick=()=>{
+    const text=generate(document.getElementById('editor'));
+    navigator.clipboard.writeText(text).then(()=>{
+      const t=document.getElementById('toast');t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'),1200);
     });
   };
 </script>
