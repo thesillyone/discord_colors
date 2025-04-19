@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Discord ANSI‑block generator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind CDN for quick styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* keep coloured spans visible inside the editor */
+    #editor span{font-style:italic}
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
+  <h1 class="text-2xl font-bold mb-4">Discord ANSI Color‑Block Generator</h1>
+
+  <div class="w-full max-w-3xl space-y-4">
+    <!-- Editable area -->
+    <div>
+      <label class="font-semibold mb-1 block" for="editor">Editable text:</label>
+      <div id="editor" contenteditable="true" class="border border-gray-300 rounded-lg p-4 bg-white min-h-[200px] whitespace-pre-wrap"></div>
+    </div>
+
+    <!-- colour tools -->
+    <div class="flex flex-wrap items-center gap-4">
+      <input type="color" id="colorPicker" value="#22a034" class="w-10 h-10 p-0 border-0 cursor-pointer" title="Custom colour"/>
+      <button id="applyColor" class="bg-blue-600 text-white px-4 py-2 rounded-lg shadow">Apply colour</button>
+
+      <!-- presets -->
+      <div class="flex items-center gap-1">
+        <button data-color="#22a034" title="green" class="w-8 h-8 rounded-lg" style="background:#22a034"></button>
+        <button data-color="#daa520" title="gold" class="w-8 h-8 rounded-lg" style="background:#daa520"></button>
+        <button data-color="#cc0000" title="red" class="w-8 h-8 rounded-lg" style="background:#cc0000"></button>
+        <button data-color="#5f5fff" title="blue" class="w-8 h-8 rounded-lg" style="background:#5f5fff"></button>
+      </div>
+    </div>
+
+    <!-- actions -->
+    <div class="flex flex-wrap gap-2">
+      <button id="generate" class="bg-emerald-600 text-white px-4 py-2 rounded-lg shadow">Generate Discord text</button>
+      <button id="copy" class="bg-gray-700 text-white px-4 py-2 rounded-lg shadow">Copy to clipboard</button>
+    </div>
+
+    <!-- output -->
+    <div>
+      <label class="font-semibold mb-1 block" for="output">Output for Discord:</label>
+      <textarea id="output" readonly class="border border-gray-300 rounded-lg p-4 bg-white w-full h-48 whitespace-pre"></textarea>
+    </div>
+  </div>
+
+  <footer class="mt-4 text-sm text-gray-500">Save this file (or host it via GitHub Pages) – it’s completely client‑side, no backend needed.</footer>
+
+<script>
+  // Helpers --------------------------------------------------------
+  const ESC = "\u001b"; // ANSI escape char
+  const editor = document.getElementById("editor");
+  const picker = document.getElementById("colorPicker");
+
+  // colour application --------------------------------------------
+  function apply(color){
+    document.execCommand("styleWithCSS", true, null); // wrap with span style="color:.."
+    document.execCommand("foreColor", false, color);
+  }
+  document.getElementById("applyColor").onclick = () => apply(picker.value);
+  document.querySelectorAll("[data-color]").forEach(btn=>{
+    btn.onclick = () => {
+      picker.value = btn.dataset.color;
+      apply(btn.dataset.color);
+    };
+  });
+
+  // ---------------------------------------------------------------
+  // HTML → Discord ANSI conversion
+  // ---------------------------------------------------------------
+  function rgbStringToComponents(rgb){
+    const m = rgb.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    return m ? {r:+m[1], g:+m[2], b:+m[3]} : {r:255, g:255, b:255};
+  }
+  function ansiForColor(rgb){
+    const {r,g,b} = rgbStringToComponents(rgb);
+    return `${ESC}[38;2;${r};${g};${b}m`;
+  }
+  function generateDiscordText(root){
+    let out = "";
+    let inside = false;
+
+    function open(){
+      if(!inside){
+        if(out && !out.endsWith("\n")) out += "\n";
+        out += "```ansi\n";
+        inside = true;
+      }
+    }
+    function close(){
+      if(inside){
+        out += "\n```";
+        inside = false;
+      }
+    }
+    function walk(node){
+      if(node.nodeType === Node.TEXT_NODE){
+        out += node.textContent;
+        return;
+      }
+      if(node.nodeType !== Node.ELEMENT_NODE) return;
+
+      if(node.tagName === "BR"){
+        out += "\n";
+        return;
+      }
+
+      const colour = node.style.color;
+      if(colour){ // coloured span/font
+        open();
+        out += ansiForColor(colour);
+        node.childNodes.forEach(walk);
+        out += `${ESC}[0m`; // reset but keep block open – allows multiple colours in same block
+      } else {
+        close();
+        node.childNodes.forEach(walk);
+      }
+    }
+
+    root.childNodes.forEach(walk);
+    close();
+    return out.trim();
+  }
+
+  // UI glue --------------------------------------------------------
+  document.getElementById("generate").onclick = () => {
+    document.getElementById("output").value = generateDiscordText(editor);
+  };
+  document.getElementById("copy").onclick = () => {
+    navigator.clipboard.writeText(document.getElementById("output").value).then(()=>{
+      alert("Copied to clipboard");
+    });
+  };
+</script>
+</body>
+</html>
