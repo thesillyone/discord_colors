@@ -86,10 +86,6 @@
 <body>
   <h1 style="text-align:center; margin-top:1rem;">Генератор ANSI‑блоков для Discord</h1>
   <div id="editor" contenteditable spellcheck="false"></div>
-  <div style="text-align:center; margin-bottom:1rem;">
-    <label for="puppetName">Имя куклы: </label>
-    <input id="puppetName" type="text" placeholder="Например, Мари" style="padding: 0.25rem; border-radius: 0.25rem; border: none;" />
-  </div>
   <div class="toolbar">
     <button id="copy">Скопировать в Discord</button>
     <button id="clear">Очистить форматирование</button>
@@ -104,6 +100,11 @@
     <div class="row">
       <button id="bold" class="bold">Жирный</button>
       <button id="underline" class="underline">Подчеркнуть</button>
+    </div>
+    <div style="margin-top:1rem;">
+      <label for="puppetName" style="font-weight:bold; display:block; margin-bottom:0.25rem;">Имя куклы:</label>
+      <input id="puppetName" type="text" placeholder="Например, Мари"
+             style="padding: 0.25rem 0.5rem; border-radius: 0.375rem; border: none; background-color: #202225; color: #dcddde; outline: none; font-size: 0.95rem; width: 100%;" />
     </div>
   </div>
   <div id="toast">Скопировано!</div>
@@ -335,17 +336,19 @@ editor.addEventListener('keydown', function(e) {
   }
 });
 
+document.getElementById('copy').onclick = () => {
+  const puppetNameInput = document.getElementById('puppetName');
+  const puppetName = puppetNameInput.value.trim();
 
-    document.getElementById('copy').onclick = () => {
   const ansi = generateANSI(document.getElementById('editor'));
-  const puppetName = document.getElementById('puppetName').value.trim();
 
-  // Функция разбивает по двойному переводу строки и вставляет "Имя: "
+  // Разделение по абзацам: допускаем любые невидимые символы между переводами строк
   function applyPuppetPrefix(text, name) {
-    if (!name) return text; // не вставляем, если не указано имя
+    if (!name) return text;
 
-    // Разбиваем на абзацы по двойному переводу строки
-    const parts = text.split(/\n{2,}/g);
+    // Абзац — это две и более строк с любыми невидимыми символами между ними
+    const parts = text.split(/(?:\n|\r|\u200B|\u200C|\u200D|\u2060|\xA0){2,}/g);
+
     return parts.map(p => `${name}: ${p.trim()}`).join('\n\n');
   }
 
@@ -357,6 +360,7 @@ editor.addEventListener('keydown', function(e) {
     setTimeout(() => t.classList.remove('show'), 1500);
   });
 };
+
     // Обработка вставки текста (Ctrl+V): каждый символ в обёртку
 editor.addEventListener('paste', function(e) {
   e.preventDefault();
