@@ -86,6 +86,10 @@
 <body>
   <h1 style="text-align:center; margin-top:1rem;">Генератор ANSI‑блоков для Discord</h1>
   <div id="editor" contenteditable spellcheck="false"></div>
+  <div style="text-align:center; margin-bottom:1rem;">
+    <label for="puppetName">Имя куклы: </label>
+    <input id="puppetName" type="text" placeholder="Например, Мари" style="padding: 0.25rem; border-radius: 0.25rem; border: none;" />
+  </div>
   <div class="toolbar">
     <button id="copy">Скопировать в Discord</button>
     <button id="clear">Очистить форматирование</button>
@@ -333,13 +337,26 @@ editor.addEventListener('keydown', function(e) {
 
 
     document.getElementById('copy').onclick = () => {
-      const ansi = generateANSI(document.getElementById('editor'));
-      navigator.clipboard.writeText(ansi).then(() => {
-        const t = document.getElementById('toast');
-        t.classList.add('show');
-        setTimeout(() => t.classList.remove('show'), 1500);
-      });
-    };
+  const ansi = generateANSI(document.getElementById('editor'));
+  const puppetName = document.getElementById('puppetName').value.trim();
+
+  // Функция разбивает по двойному переводу строки и вставляет "Имя: "
+  function applyPuppetPrefix(text, name) {
+    if (!name) return text; // не вставляем, если не указано имя
+
+    // Разбиваем на абзацы по двойному переводу строки
+    const parts = text.split(/\n{2,}/g);
+    return parts.map(p => `${name}: ${p.trim()}`).join('\n\n');
+  }
+
+  const withNames = applyPuppetPrefix(ansi, puppetName);
+
+  navigator.clipboard.writeText(withNames).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+};
     // Обработка вставки текста (Ctrl+V): каждый символ в обёртку
 editor.addEventListener('paste', function(e) {
   e.preventDefault();
