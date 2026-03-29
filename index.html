@@ -115,4 +115,473 @@
     const fgCss = ['#586e75','#dc322f','#859900','#b58900','#268bd2','#d33682','#2aa198','#eee8d5'];
     const bgCss = ['#002b36','#cb4b16','#586e75','#657b83','#839496','#6c71c4','#93a1a1','#fdf6e3'];
     const fgCodes = [30,31,32,33,34,35,36,37];
-    const bgCodes = fgCodes.map(c=>c
+    const bgCodes = fgCodes.map(c=>c+10);
+
+    const editor = document.getElementById('editor');
+
+    // ==========================================
+    // ИСТОРИЯ (UNDO / REDO)
+    // ==========================================
+    const editorHistory = {
+      undoStack: [],
+      redoStack: [],
+      maxSize: 50,
+      isRestoring: false,
+
+      save() {
+        if (this.isRestoring) return;
+        const pos = getCaretInfo();
+        const html = editor.innerHTML;
+
+        if (this.undoStack.length > 0) {
+          const last = this.undoStack[this.undoStack.length - 1];
+          if (last.html === html) return;
+        }
+
+        this.undoStack.push({ html, pos });
+        if (this.undoStack.length > this.maxSize) this.undoStack.shift();
+        this.redoStack = []; 
+      },
+
+      undo() {
+        if (this.undoStack.length === 0) return;
+        this.isRestoring = true;
+        this.redoStack.push({ html: editor.innerHTML, pos: getCaretInfo() });
+        const state = this.undoStack.pop();
+        editor.innerHTML = state.html;
+        setCaretInfo(state.pos);
+        this.isRestoring = false;
+        updateToolbarState();
+      },
+
+      redo() {
+        if (this.redoStack.length === 0) return;
+        this.isRestoring = true;
+        this.undoStack.push({ html: editor.innerHTML, pos: getCaretInfo() });
+        const state = this.redoStack.pop();
+        editor.innerHTML = state.html;
+        setCaretInfo(state.pos);
+        this.isRestoring = false;
+        updateToolbarState();
+      }
+    };
+
+    function getCaretInfo() {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return null;
+      const range = sel.getRangeAt(0);
+
+      // БЕЗОПАСНОСТЬ: Если кликнули вообще вне редактора - игнорируем
+      if (!editor.contains(range.startContainer)) return null;
+
+      const preCaretRange = range.cloneRange();
+      preCaretRange.selectNodeContents(editor);
+      preCaretRange.setEnd(range.startContainer, range.startOffset);
+      let start = getRangeLength(preCaretRange);
+
+      const postCaretRange = range.cloneRange();
+      postCaretRange.selectNodeContents(editor);
+      postCaretRange.setEnd(range.endContainer, range.endOffset);
+      let end = getRangeLength(postCaretRange);
+
+      return { start, end };
+    }
+
+    function getRangeLength(r) {
+      const frag = r.cloneContents();
+      let len = 0;
+      function walk(node) {
+        if (node.nodeType === 3) len += node.length;
+        else if (node.nodeName === 'BR') len += 1;
+        else node.childNodes.forEach(walk);
+      }
+      walk(frag);
+      return len;
+    }
+
+    function setCaretInfo(pos) {
+      if (!pos) return;
+      editor.focus();
+      const sel = window.getSelection();
+      const range = document.createRange();
+
+      let current = 0;
+      let startNode = null, startOffset = 0;
+      let endNode = null, endOffset = 0;
+
+      function walk(node) {
+        if (endNode) return;
+        if (node.nodeType === 3) {
+          const len = node.length;
+          if (!startNode && current + len >= pos.start) {
+            startNode = node;
+            startOffset = pos.start - current;
+          }
+          if (!endNode && current + len >= pos.end) {
+            endNode = node;
+            endOffset = pos.end - current;
+          }
+          current += len;
+        } else if (node.nodeName === 'BR') {
+          const len = 1;
+          if (!startNode && current + len >= pos.start) {
+            startNode = node.parentNode;
+            startOffset = Array.from(startNode.childNodes).indexOf(node);
+            if (current + len === pos.start) startOffset += 1;
+          }
+          if (!endNode && current + len >= pos.end) {
+            endNode = node.parentNode;
+            endOffset = Array.from(endNode.childNodes).indexOf(node);
+            if (current + len === pos.end) endOffset += 1;
+          }
+          current += len;
+        } else {
+          node.childNodes.forEach(walk);
+        }
+      }
+
+      walk(editor);
+
+      if (startNode && endNode) {
+        range.setStart(startNode, startOffset);
+        range.setEnd(endNode, endOffset);
+      } else if (startNode) {
+        range.setStart(startNode, startOffset);
+        range.collapse(true);
+      } else {
+        range.selectNodeContents(editor);
+        range.collapse(false);
+      }
+      
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    // ==========================================
+
+    function isSpanSelected(range, span) {
+      if (range.collapsed) return false;
+      const spanRange = document.createRange();
+      spanRange.selectNodeContents(span);
+      
+      const startBeforeEnd = range.compareBoundaryPoints(Range.END_TO_START, spanRange) === -1;
+      const endAfterStart = range.compareBoundaryPoints(Range.START_TO_END, spanRange) === 1;
+      
+      return startBeforeEnd && endAfterStart;
+    }
+
+    editor.addEventListener('beforeinput', function(e) {
+      if (e.inputType === 'historyUndo' || e.inputType === 'historyRedo') {
+        e.preventDefault();
+        return;
+      }
+      editorHistory.save(); 
+
+      if (e.inputType === 'insertText' && e.data) {
+        e.preventDefault();
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const range = sel.getRangeAt(0);
+        const span = document.createElement('span');
+        span.textContent = e.data;
+        range.deleteContents();
+        range.insertNode(span);
+        range.setStartAfter(span);
+        range.setEndAfter(span);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        updateToolbarState();
+      }
+    });
+
+    function applyStyle(type, value) {
+      editorHistory.save(); 
+
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const spans = Array.from(editor.querySelectorAll('span'));
+
+      let toggleOff = true;
+      let hasSelection = false;
+
+      spans.forEach(span => {
+        if (isSpanSelected(range, span)) {
+          hasSelection = true;
+          if (type === 'fg' || type === 'bg') {
+            if (span.dataset[type] !== String(value)) toggleOff = false;
+          } else {
+            if (!(type in span.dataset)) toggleOff = false;
+          }
+        }
+      });
+
+      if (!hasSelection) return;
+
+      spans.forEach(span => {
+        if (isSpanSelected(range, span)) {
+          if (toggleOff) {
+            delete span.dataset[type];
+            if (type === 'bold') span.style.fontWeight = '';
+            else if (type === 'underline') span.style.textDecoration = '';
+            else if (type === 'fg') span.style.color = '';
+            else if (type === 'bg') span.style.backgroundColor = '';
+          } else {
+            mergeAttributes(span, type, value);
+          }
+        }
+      });
+      updateToolbarState();
+    }
+
+    function mergeAttributes(span, type, value) {
+      if (type === 'fg') {
+        span.dataset.fg = value;
+        span.style.color = fgCss[fgCodes.indexOf(+value)];
+      } else if (type === 'bg') {
+        span.dataset.bg = value;
+        span.style.backgroundColor = bgCss[bgCodes.indexOf(+value)];
+      } else if (type === 'bold') {
+        span.dataset.bold = 1;
+        span.style.fontWeight = 'bold';
+      } else if (type === 'underline') {
+        span.dataset.underline = 4;
+        span.style.textDecoration = 'underline';
+      }
+    }
+
+    function updateToolbarState() {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const spans = Array.from(editor.querySelectorAll('span'));
+      const selected = spans.filter(span => isSpanSelected(range, span));
+
+      const boldBtn = document.getElementById('bold');
+      const underlineBtn = document.getElementById('underline');
+
+      const allBold = selected.length && selected.every(span => span.dataset.bold);
+      const allUnderline = selected.length && selected.every(span => span.dataset.underline);
+
+      boldBtn.classList.toggle('active', allBold);
+      underlineBtn.classList.toggle('active', allUnderline);
+    }
+
+    // --- ФИКС: ЗАПРЕЩАЕМ КНОПКАМ ВОРОВАТЬ ФОКУС У РЕДАКТОРА ---
+    ['bold', 'underline', 'clear', 'copy'].forEach(id => {
+      const btn = document.getElementById(id);
+      if(btn) btn.onmousedown = (e) => e.preventDefault();
+    });
+
+    document.getElementById('bold').onclick = () => applyStyle('bold', 1);
+    document.getElementById('underline').onclick = () => applyStyle('underline', 4);
+
+    document.getElementById('clear').onclick = () => {
+      editorHistory.save(); 
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const spans = Array.from(editor.querySelectorAll('span'));
+      spans.forEach(span => {
+        if (isSpanSelected(range, span)) {
+          span.removeAttribute('style');
+          delete span.dataset.bold;
+          delete span.dataset.underline;
+          delete span.dataset.fg;
+          delete span.dataset.bg;
+        }
+      });
+      updateToolbarState();
+    };
+
+    // Генерируем палитры (с защитой от воровства фокуса)
+    document.getElementById('fg-palette').append(...fgCodes.map((c,i) => {
+      const b = document.createElement('button');
+      b.style.backgroundColor = fgCss[i]; // Используем backgroundColor для надежности
+      b.onmousedown = (e) => e.preventDefault(); // Защита фокуса
+      b.onclick = () => applyStyle('fg', c);
+      return b;
+    }));
+
+    document.getElementById('bg-palette').append(...bgCodes.map((c,i) => {
+      const b = document.createElement('button');
+      b.style.backgroundColor = bgCss[i]; 
+      b.onmousedown = (e) => e.preventDefault(); // Защита фокуса
+      b.onclick = () => applyStyle('bg', c);
+      return b;
+    }));
+
+    function generateANSI(root) {
+      const paragraphs = [];
+      let current = [];
+
+      function flushParagraph() {
+        paragraphs.push(current);
+        current = [];
+      }
+
+      function walk(node, fmt) {
+        if (node.nodeType === 3) {
+          node.textContent.split('').forEach(ch => {
+            if (ch !== '\u200B') {
+              current.push({ ch, fmt: { ...fmt } });
+            }
+          });
+        } else if (node.nodeType === 1) {
+          if (node.tagName === 'BR') {
+            flushParagraph();
+          } else if (node.tagName === 'SPAN') {
+            const newFmt = { ...fmt };
+            if (node.dataset.bold) newFmt.bold = 1;
+            if (node.dataset.underline) newFmt.underline = 4;
+            if (node.dataset.fg) newFmt.fg = +node.dataset.fg;
+            if (node.dataset.bg) newFmt.bg = +node.dataset.bg;
+            node.childNodes.forEach(child => walk(child, newFmt));
+          } else {
+            node.childNodes.forEach(child => walk(child, fmt));
+          }
+        }
+      }
+
+      root.childNodes.forEach(n => walk(n, { bold: 0, underline: 0, fg: 0, bg: 0 }));
+      flushParagraph();
+
+      let result = '';
+      let prevFmt = { bold: 0, underline: 0, fg: 0, bg: 0 };
+      let inAnsiBlock = false;
+
+      function fmtDiff(a, b) {
+        return JSON.stringify(a) !== JSON.stringify(b);
+      }
+
+      function fmtToAnsi(fmt) {
+        const codes = [];
+        if (fmt.bold) codes.push(1);
+        if (fmt.underline) codes.push(4);
+        if (fmt.fg) codes.push(fmt.fg);
+        if (fmt.bg) codes.push(fmt.bg);
+        return codes.length ? ESC + '[' + codes.join(';') + 'm' : '';
+      }
+
+      for (let i = 0; i < paragraphs.length; i++) {
+        const para = paragraphs[i];
+        let hasFormatting = para.some(p => p.fmt.bold || p.fmt.underline || p.fmt.fg || p.fmt.bg);
+
+        if (hasFormatting) {
+          if (!inAnsiBlock) {
+            result += '```ansi\n';
+            inAnsiBlock = true;
+          }
+          prevFmt = { bold: 0, underline: 0, fg: 0, bg: 0 };
+          for (const { ch, fmt } of para) {
+            if (fmtDiff(fmt, prevFmt)) {
+              result += ESC + '[0m';
+              result += fmtToAnsi(fmt);
+              prevFmt = { ...fmt };
+            }
+            result += ch;
+          }
+          result += '\n';
+        } else {
+          if (inAnsiBlock) {
+            result += ESC + '[0m\n```';
+            inAnsiBlock = false;
+          }
+          result += para.map(p => p.ch).join('') + '\n';
+        }
+      }
+
+      if (inAnsiBlock) {
+        result += ESC + '[0m\n```';
+      }
+
+      return result.replace(/\n+$/, '');
+    }
+
+    editor.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) editorHistory.redo();
+        else editorHistory.undo();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        editorHistory.redo();
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        editorHistory.save(); 
+        e.preventDefault();
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const range = sel.getRangeAt(0);
+        const br = document.createElement('br');
+        const span = document.createElement('span');
+        span.appendChild(br);
+        const space = document.createTextNode('\u200B');
+        range.deleteContents();
+        range.insertNode(space);
+        range.insertNode(span);
+        range.setStartAfter(space);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        updateToolbarState();
+      }
+    });
+
+    document.getElementById('copy').onclick = () => {
+      const puppetNameInput = document.getElementById('puppetName');
+      const puppetName = puppetNameInput.value.trim();
+      const ansi = generateANSI(document.getElementById('editor'));
+
+      function applyPuppetPrefix(text, name) {
+        if (!name) return text;
+        const parts = text.split(/(?:\n|\r|\u200B|\u200C|\u200D|\u2060|\xA0){2,}/g);
+        return parts.map(p => {
+          const trimmed = p.trim();
+          if (trimmed.startsWith('```ansi')) {
+            return `${name}:\n${trimmed}`;
+          }
+          return `${name}: ${trimmed}`;
+        }).join('\n\n');
+      }
+
+      const withNames = applyPuppetPrefix(ansi, puppetName);
+
+      navigator.clipboard.writeText(withNames).then(() => {
+        const t = document.getElementById('toast');
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 1500);
+      });
+    };
+
+    editor.addEventListener('paste', function(e) {
+      editorHistory.save(); 
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text');
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+
+      const frag = document.createDocumentFragment();
+      for (const char of text) {
+        if (char === '\n') {
+          const br = document.createElement('br');
+          frag.appendChild(br);
+        } else {
+          const span = document.createElement('span');
+          span.textContent = char;
+          frag.appendChild(span);
+        }
+      }
+      range.deleteContents();
+      range.insertNode(frag);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      updateToolbarState();
+    });
+  </script>
+</body>
+</html>
