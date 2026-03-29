@@ -79,6 +79,7 @@
       background:rgba(0,0,0,0.8); color:#fff;
       padding:.5rem 1rem; border-radius:.5rem;
       opacity:0; transition:opacity .3s;
+      pointer-events: none;
     }
     #toast.show { opacity:1; }
   </style>
@@ -118,6 +119,18 @@
 
     const editor = document.getElementById('editor');
 
+    // --- ФИКС 6: Строгая проверка выделения ---
+    function isSpanSelected(range, span) {
+      if (range.collapsed) return false;
+      const spanRange = document.createRange();
+      spanRange.selectNodeContents(span);
+      
+      const endsAfterStart = range.compareBoundaryPoints(Range.END_TO_START, spanRange) === 1;
+      const startsBeforeEnd = range.compareBoundaryPoints(Range.START_TO_END, spanRange) === -1;
+      
+      return endsAfterStart && startsBeforeEnd;
+    }
+
     editor.addEventListener('beforeinput', function(e) {
       if (e.inputType === 'insertText' && e.data) {
         e.preventDefault();
@@ -136,47 +149,33 @@
       }
     });
 
-      // Строгая проверка выделения (игнорирует простое касание границ)
-      function isSpanSelected(range, span) {
-        // Если это просто мигающий курсор (ничего не выделено), сразу false
-        if (range.collapsed) return false; 
-        
-        const spanRange = document.createRange();
-        spanRange.selectNodeContents(span);
-        
-        // Выделение реально захватывает span, только если:
-        // 1. Конец выделения находится ПОСЛЕ начала span
-        // 2. Начало выделения находится ДО конца span
-        const endsAfterStart = range.compareBoundaryPoints(Range.END_TO_START, spanRange) === 1;
-        const startsBeforeEnd = range.compareBoundaryPoints(Range.START_TO_END, spanRange) === -1;
-        
-        return endsAfterStart && startsBeforeEnd;
-      }
-    
+    // --- ФИКС 5: Исправленная логика применения стилей и цветов ---
     function applyStyle(type, value) {
       const sel = window.getSelection();
       if (!sel.rangeCount) return;
       const range = sel.getRangeAt(0);
       const spans = Array.from(editor.querySelectorAll('span'));
-    
+
       let toggleOff = true;
+      let hasSelection = false;
+
       spans.forEach(span => {
         if (isSpanSelected(range, span)) {
+          hasSelection = true;
           if (type === 'fg' || type === 'bg') {
-            // Для цветов отключаем, только если везде стоит РОВНО ТОТ ЖЕ цвет
             if (span.dataset[type] !== String(value)) toggleOff = false;
           } else {
-            // Для bold/underline обычная проверка наличия
             if (!(type in span.dataset)) toggleOff = false;
           }
         }
       });
-    
+
+      if (!hasSelection) return;
+
       spans.forEach(span => {
         if (isSpanSelected(range, span)) {
           if (toggleOff) {
             delete span.dataset[type];
-            // Добавлен корректный сброс для всех 4 типов форматирования
             if (type === 'bold') span.style.fontWeight = '';
             else if (type === 'underline') span.style.textDecoration = '';
             else if (type === 'fg') span.style.color = '';
@@ -210,7 +209,7 @@
       if (!sel.rangeCount) return;
       const range = sel.getRangeAt(0);
       const spans = Array.from(editor.querySelectorAll('span'));
-      const selected = spans.filter(span => if (isSpanSelected(range, span)));
+      const selected = spans.filter(span => isSpanSelected(range, span));
 
       const boldBtn = document.getElementById('bold');
       const underlineBtn = document.getElementById('underline');
@@ -225,13 +224,14 @@
     document.getElementById('bold').onclick = () => applyStyle('bold', 1);
     document.getElementById('underline').onclick = () => applyStyle('underline', 4);
 
+    // --- ФИКС 3: Кнопка очистки больше не удаляет переносы строк ---
     document.getElementById('clear').onclick = () => {
       const sel = window.getSelection();
       if (!sel.rangeCount) return;
       const range = sel.getRangeAt(0);
       const spans = Array.from(editor.querySelectorAll('span'));
       spans.forEach(span => {
-        if (range.intersectsNode(span)) {
+        if (isSpanSelected(range, span)) {
           span.removeAttribute('style');
           delete span.dataset.bold;
           delete span.dataset.underline;
@@ -257,171 +257,170 @@
     }));
 
     function generateANSI(root) {
-  const ESC = '\u001b';
-  const paragraphs = [];
-  let current = [];
+      const paragraphs = [];
+      let current = [];
 
-  function flushParagraph() {
-    paragraphs.push(current);
-    current = [];
-  }
+      // --- ФИКС 1: Разрешаем добавлять пустые строки ---
+      function flushParagraph() {
+        paragraphs.push(current);
+        current = [];
+      }
 
-  function walk(node, fmt) {
-    if (node.nodeType === 3) {
-      node.textContent.split('').forEach(ch => {
-        if (ch !== '\u200B') {
-          current.push({ ch, fmt: { ...fmt } });
+      function walk(node, fmt) {
+        if (node.nodeType === 3) {
+          node.textContent.split('').forEach(ch => {
+            // --- ФИКС 4: Игнорируем невидимые символы \u200B ---
+            if (ch !== '\u200B') {
+              current.push({ ch, fmt: { ...fmt } });
+            }
+          });
+        } else if (node.nodeType === 1) {
+          if (node.tagName === 'BR') {
+            flushParagraph();
+          } else if (node.tagName === 'SPAN') {
+            const newFmt = { ...fmt };
+            if (node.dataset.bold) newFmt.bold = 1;
+            if (node.dataset.underline) newFmt.underline = 4;
+            if (node.dataset.fg) newFmt.fg = +node.dataset.fg;
+            if (node.dataset.bg) newFmt.bg = +node.dataset.bg;
+            node.childNodes.forEach(child => walk(child, newFmt));
+          } else {
+            node.childNodes.forEach(child => walk(child, fmt));
+          }
         }
-      });
-    } else if (node.nodeType === 1) {
-      if (node.tagName === 'BR') {
-        flushParagraph();
-      } else if (node.tagName === 'SPAN') {
-        const newFmt = { ...fmt };
-        if (node.dataset.bold) newFmt.bold = 1;
-        if (node.dataset.underline) newFmt.underline = 4;
-        if (node.dataset.fg) newFmt.fg = +node.dataset.fg;
-        if (node.dataset.bg) newFmt.bg = +node.dataset.bg;
-        node.childNodes.forEach(child => walk(child, newFmt));
-      } else {
-        node.childNodes.forEach(child => walk(child, fmt));
       }
-    }
-  }
 
-  root.childNodes.forEach(n => walk(n, { bold: 0, underline: 0, fg: 0, bg: 0 }));
-  flushParagraph();
+      root.childNodes.forEach(n => walk(n, { bold: 0, underline: 0, fg: 0, bg: 0 }));
+      flushParagraph();
 
-  let result = '';
-  let prevFmt = { bold: 0, underline: 0, fg: 0, bg: 0 };
-  let inAnsiBlock = false;
+      let result = '';
+      let prevFmt = { bold: 0, underline: 0, fg: 0, bg: 0 };
+      let inAnsiBlock = false;
 
-  function fmtDiff(a, b) {
-    return JSON.stringify(a) !== JSON.stringify(b);
-  }
-
-  function fmtToAnsi(fmt) {
-    const codes = [];
-    if (fmt.bold) codes.push(1);
-    if (fmt.underline) codes.push(4);
-    if (fmt.fg) codes.push(fmt.fg);
-    if (fmt.bg) codes.push(fmt.bg);
-    return codes.length ? ESC + '[' + codes.join(';') + 'm' : '';
-  }
-
-  for (let i = 0; i < paragraphs.length; i++) {
-    const para = paragraphs[i];
-    let hasFormatting = para.some(p => p.fmt.bold || p.fmt.underline || p.fmt.fg || p.fmt.bg);
-
-    if (hasFormatting) {
-      if (!inAnsiBlock) {
-        result += '```ansi\n';
-        inAnsiBlock = true;
+      function fmtDiff(a, b) {
+        return JSON.stringify(a) !== JSON.stringify(b);
       }
-      prevFmt = { bold: 0, underline: 0, fg: 0, bg: 0 };
-      for (const { ch, fmt } of para) {
-        if (fmtDiff(fmt, prevFmt)) {
-          result += ESC + '[0m';
-          result += fmtToAnsi(fmt);
-          prevFmt = { ...fmt };
+
+      function fmtToAnsi(fmt) {
+        const codes = [];
+        if (fmt.bold) codes.push(1);
+        if (fmt.underline) codes.push(4);
+        if (fmt.fg) codes.push(fmt.fg);
+        if (fmt.bg) codes.push(fmt.bg);
+        return codes.length ? ESC + '[' + codes.join(';') + 'm' : '';
+      }
+
+      for (let i = 0; i < paragraphs.length; i++) {
+        const para = paragraphs[i];
+        let hasFormatting = para.some(p => p.fmt.bold || p.fmt.underline || p.fmt.fg || p.fmt.bg);
+
+        if (hasFormatting) {
+          if (!inAnsiBlock) {
+            result += '```ansi\n';
+            inAnsiBlock = true;
+          }
+          prevFmt = { bold: 0, underline: 0, fg: 0, bg: 0 };
+          for (const { ch, fmt } of para) {
+            if (fmtDiff(fmt, prevFmt)) {
+              result += ESC + '[0m';
+              result += fmtToAnsi(fmt);
+              prevFmt = { ...fmt };
+            }
+            result += ch;
+          }
+          result += '\n';
+        } else {
+          if (inAnsiBlock) {
+            result += ESC + '[0m\n```';
+            inAnsiBlock = false;
+          }
+          result += para.map(p => p.ch).join('') + '\n';
         }
-        result += ch;
       }
-      result += '\n';
-    } else {
+
       if (inAnsiBlock) {
         result += ESC + '[0m\n```';
-        inAnsiBlock = false;
       }
-      result += para.map(p => p.ch).join('') + '\n';
+
+      // Подчищаем лишние пустые строки в самом конце файла
+      return result.replace(/\n+$/, '');
     }
-  }
 
-  if (inAnsiBlock) {
-    result += ESC + '[0m\n```';
-  }
-
-  return result.trimEnd();
-}
-
-// исправим ввод перевода строки в редакторе
-editor.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    const sel = window.getSelection();
-    if (!sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    const br = document.createElement('br');
-    const span = document.createElement('span');
-    span.appendChild(br);
-    const space = document.createTextNode('\u200B');
-    range.deleteContents();
-    range.insertNode(space);
-    range.insertNode(span);
-    range.setStartAfter(space);
-    sel.removeAllRanges();
-    sel.addRange(range);
-    updateToolbarState();
-  }
-});
-
-document.getElementById('copy').onclick = () => {
-  const puppetNameInput = document.getElementById('puppetName');
-  const puppetName = puppetNameInput.value.trim();
-
-  const ansi = generateANSI(document.getElementById('editor'));
-
-  // Разделение по абзацам: допускаем любые невидимые символы между переводами строк
-  function applyPuppetPrefix(text, name) {
-    if (!name) return text;
-
-    // Абзац — это две и более строк с любыми невидимыми символами между ними
-    const parts = text.split(/(?:\n|\r|\u200B|\u200C|\u200D|\u2060|\xA0){2,}/g);
-
-    return parts.map(p => {
-      const trimmed = p.trim();
-      if (trimmed.startsWith('```ansi')) {
-        return `${name}:\n${trimmed}`;
+    editor.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const range = sel.getRangeAt(0);
+        const br = document.createElement('br');
+        const span = document.createElement('span');
+        span.appendChild(br);
+        const space = document.createTextNode('\u200B');
+        range.deleteContents();
+        range.insertNode(space);
+        range.insertNode(span);
+        range.setStartAfter(space);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        updateToolbarState();
       }
-      return `${name}: ${trimmed}`;
-    }).join('\n\n');
-  }
+    });
 
-  const withNames = applyPuppetPrefix(ansi, puppetName);
+    document.getElementById('copy').onclick = () => {
+      const puppetNameInput = document.getElementById('puppetName');
+      const puppetName = puppetNameInput.value.trim();
 
-  navigator.clipboard.writeText(withNames).then(() => {
-    const t = document.getElementById('toast');
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 1500);
-  });
-};
+      const ansi = generateANSI(document.getElementById('editor'));
 
-    // Обработка вставки текста (Ctrl+V): каждый символ в обёртку
-editor.addEventListener('paste', function(e) {
-  e.preventDefault();
-  const text = (e.clipboardData || window.clipboardData).getData('text');
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
+      function applyPuppetPrefix(text, name) {
+        if (!name) return text;
 
-  const frag = document.createDocumentFragment();
-  for (const char of text) {
-    if (char === '\n') {
-      const br = document.createElement('br');
-      frag.appendChild(br);
-    } else {
-      const span = document.createElement('span');
-      span.textContent = char;
-      frag.appendChild(span);
-    }
-  }
-  range.deleteContents();
-  range.insertNode(frag);
-  range.collapse(false);
-  sel.removeAllRanges();
-  sel.addRange(range);
-  updateToolbarState();
-});
+        const parts = text.split(/(?:\n|\r|\u200B|\u200C|\u200D|\u2060|\xA0){2,}/g);
+
+        // --- ФИКС 2: Имя куклы не ломает блок кода ---
+        return parts.map(p => {
+          const trimmed = p.trim();
+          if (trimmed.startsWith('```ansi')) {
+            return `${name}:\n${trimmed}`;
+          }
+          return `${name}: ${trimmed}`;
+        }).join('\n\n');
+      }
+
+      const withNames = applyPuppetPrefix(ansi, puppetName);
+
+      navigator.clipboard.writeText(withNames).then(() => {
+        const t = document.getElementById('toast');
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 1500);
+      });
+    };
+
+    editor.addEventListener('paste', function(e) {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text');
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+
+      const frag = document.createDocumentFragment();
+      for (const char of text) {
+        if (char === '\n') {
+          const br = document.createElement('br');
+          frag.appendChild(br);
+        } else {
+          const span = document.createElement('span');
+          span.textContent = char;
+          frag.appendChild(span);
+        }
+      }
+      range.deleteContents();
+      range.insertNode(frag);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      updateToolbarState();
+    });
   </script>
 </body>
 </html>
