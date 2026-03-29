@@ -136,6 +136,23 @@
       }
     });
 
+      // Строгая проверка выделения (игнорирует простое касание границ)
+      function isSpanSelected(range, span) {
+        // Если это просто мигающий курсор (ничего не выделено), сразу false
+        if (range.collapsed) return false; 
+        
+        const spanRange = document.createRange();
+        spanRange.selectNodeContents(span);
+        
+        // Выделение реально захватывает span, только если:
+        // 1. Конец выделения находится ПОСЛЕ начала span
+        // 2. Начало выделения находится ДО конца span
+        const endsAfterStart = range.compareBoundaryPoints(Range.END_TO_START, spanRange) === 1;
+        const startsBeforeEnd = range.compareBoundaryPoints(Range.START_TO_END, spanRange) === -1;
+        
+        return endsAfterStart && startsBeforeEnd;
+      }
+    
     function applyStyle(type, value) {
       const sel = window.getSelection();
       if (!sel.rangeCount) return;
@@ -144,7 +161,7 @@
     
       let toggleOff = true;
       spans.forEach(span => {
-        if (range.intersectsNode(span)) {
+        if (isSpanSelected(range, span)) {
           if (type === 'fg' || type === 'bg') {
             // Для цветов отключаем, только если везде стоит РОВНО ТОТ ЖЕ цвет
             if (span.dataset[type] !== String(value)) toggleOff = false;
@@ -156,7 +173,7 @@
       });
     
       spans.forEach(span => {
-        if (range.intersectsNode(span)) {
+        if (isSpanSelected(range, span)) {
           if (toggleOff) {
             delete span.dataset[type];
             // Добавлен корректный сброс для всех 4 типов форматирования
@@ -193,7 +210,7 @@
       if (!sel.rangeCount) return;
       const range = sel.getRangeAt(0);
       const spans = Array.from(editor.querySelectorAll('span'));
-      const selected = spans.filter(span => range.intersectsNode(span));
+      const selected = spans.filter(span => if (isSpanSelected(range, span)));
 
       const boldBtn = document.getElementById('bold');
       const underlineBtn = document.getElementById('underline');
