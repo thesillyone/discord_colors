@@ -141,19 +141,29 @@
       if (!sel.rangeCount) return;
       const range = sel.getRangeAt(0);
       const spans = Array.from(editor.querySelectorAll('span'));
-
+    
       let toggleOff = true;
       spans.forEach(span => {
         if (range.intersectsNode(span)) {
-          if (!(type in span.dataset)) toggleOff = false;
+          if (type === 'fg' || type === 'bg') {
+            // Для цветов отключаем, только если везде стоит РОВНО ТОТ ЖЕ цвет
+            if (span.dataset[type] !== String(value)) toggleOff = false;
+          } else {
+            // Для bold/underline обычная проверка наличия
+            if (!(type in span.dataset)) toggleOff = false;
+          }
         }
       });
-
+    
       spans.forEach(span => {
         if (range.intersectsNode(span)) {
           if (toggleOff) {
             delete span.dataset[type];
-            span.style[type === 'bold' ? 'fontWeight' : 'textDecoration'] = '';
+            // Добавлен корректный сброс для всех 4 типов форматирования
+            if (type === 'bold') span.style.fontWeight = '';
+            else if (type === 'underline') span.style.textDecoration = '';
+            else if (type === 'fg') span.style.color = '';
+            else if (type === 'bg') span.style.backgroundColor = '';
           } else {
             mergeAttributes(span, type, value);
           }
