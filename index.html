@@ -119,16 +119,18 @@
 
     const editor = document.getElementById('editor');
 
-    // --- ФИКС 6: Строгая проверка выделения ---
     function isSpanSelected(range, span) {
       if (range.collapsed) return false;
+      
       const spanRange = document.createRange();
       spanRange.selectNodeContents(span);
       
-      const endsAfterStart = range.compareBoundaryPoints(Range.END_TO_START, spanRange) === 1;
-      const startsBeforeEnd = range.compareBoundaryPoints(Range.START_TO_END, spanRange) === -1;
+      // range.start должен быть строго ДО spanRange.end (-1)
+      const startBeforeEnd = range.compareBoundaryPoints(Range.END_TO_START, spanRange) === -1;
+      // range.end должен быть строго ПОСЛЕ spanRange.start (1)
+      const endAfterStart = range.compareBoundaryPoints(Range.START_TO_END, spanRange) === 1;
       
-      return endsAfterStart && startsBeforeEnd;
+      return startBeforeEnd && endAfterStart;
     }
 
     editor.addEventListener('beforeinput', function(e) {
