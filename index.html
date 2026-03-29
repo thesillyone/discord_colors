@@ -205,9 +205,11 @@
       const spans = Array.from(editor.querySelectorAll('span'));
       spans.forEach(span => {
         if (range.intersectsNode(span)) {
-          const newSpan = document.createElement('span');
-          newSpan.textContent = span.textContent;
-          span.replaceWith(newSpan);
+          span.removeAttribute('style');
+          delete span.dataset.bold;
+          delete span.dataset.underline;
+          delete span.dataset.fg;
+          delete span.dataset.bg;
         }
       });
       updateToolbarState();
@@ -233,16 +235,16 @@
   let current = [];
 
   function flushParagraph() {
-    if (current.length) {
-      paragraphs.push(current);
-      current = [];
-    }
+    paragraphs.push(current);
+    current = [];
   }
 
   function walk(node, fmt) {
     if (node.nodeType === 3) {
       node.textContent.split('').forEach(ch => {
-        current.push({ ch, fmt: { ...fmt } });
+        if (ch !== '\u200B') {
+          current.push({ ch, fmt: { ...fmt } });
+        }
       });
     } else if (node.nodeType === 1) {
       if (node.tagName === 'BR') {
@@ -349,7 +351,13 @@ document.getElementById('copy').onclick = () => {
     // Абзац — это две и более строк с любыми невидимыми символами между ними
     const parts = text.split(/(?:\n|\r|\u200B|\u200C|\u200D|\u2060|\xA0){2,}/g);
 
-    return parts.map(p => `${name}: ${p.trim()}`).join('\n\n');
+    return parts.map(p => {
+      const trimmed = p.trim();
+      if (trimmed.startsWith('```ansi')) {
+        return `${name}:\n${trimmed}`;
+      }
+      return `${name}: ${trimmed}`;
+    }).join('\n\n');
   }
 
   const withNames = applyPuppetPrefix(ansi, puppetName);
