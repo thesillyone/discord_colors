@@ -498,13 +498,13 @@
     }
 
     editor.addEventListener('keydown', function(e) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
         e.preventDefault();
         if (e.shiftKey) editorHistory.redo();
         else editorHistory.undo();
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') {
         e.preventDefault();
         editorHistory.redo();
         return;
